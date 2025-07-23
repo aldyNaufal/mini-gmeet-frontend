@@ -28,7 +28,7 @@ function Room() {
 
 
   useEffect(() => {
-    const ws = new WebSocket(`wss://0bf147b90b10.ngrok-free.app/ws/${roomId}/${userId.current}`);
+    const ws = new WebSocket(`wss://mini-gmeet-backend-production.up.railway.app/ws/${roomId}/${userId.current}`);
     wsRef.current = ws;
     
     navigator.mediaDevices.getUserMedia({ video: true, audio: true })
