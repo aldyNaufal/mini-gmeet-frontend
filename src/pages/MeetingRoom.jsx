@@ -2,12 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Room, LocalParticipant, RemoteParticipant, Track, RoomEvent, ParticipantEvent } from 'livekit-client';
 
 // Configuration - Update these with your actual backend URL
-const BACKEND_URL = 'https://mini-gmeet-backend-production.up.railway.app'; // Change this to your deployed backend URL
-const LIVEKIT_URL = 'wss://job-hire-p0x9h07m.livekit.cloud'; // This will be fetched from backend
+const BACKEND_URL = 'https://mini-gmeet-backend-production.up.railway.app';
+const LIVEKIT_URL = 'wss://job-hire-p0x9h07m.livekit.cloud';
 
 // Main App Component
 export default function VideoConferenceApp() {
-  const [currentView, setCurrentView] = useState('join'); // 'join' or 'room'
+  const [currentView, setCurrentView] = useState('join');
   const [roomData, setRoomData] = useState(null);
   const [error, setError] = useState('');
   const [isConnecting, setIsConnecting] = useState(false);
@@ -50,7 +50,6 @@ function JoinRoomForm({ onJoin, error, setError, isConnecting, setIsConnecting }
   const [participantName, setParticipantName] = useState('');
   const [isCreatingRoom, setIsCreatingRoom] = useState(false);
 
-  // Auto-fill from URL parameters
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const roomFromUrl = urlParams.get('room');
@@ -61,6 +60,8 @@ function JoinRoomForm({ onJoin, error, setError, isConnecting, setIsConnecting }
 
   const generateToken = async (roomName, participantName) => {
     try {
+      console.log('Generating token for:', { roomName, participantName });
+      
       const response = await fetch(`${BACKEND_URL}/api/livekit/token`, {
         method: 'POST',
         headers: {
@@ -74,11 +75,20 @@ function JoinRoomForm({ onJoin, error, setError, isConnecting, setIsConnecting }
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorText = await response.text();
+        console.error('Token generation failed:', response.status, errorText);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { detail: `HTTP ${response.status}: ${errorText}` };
+        }
         throw new Error(errorData.detail || 'Failed to generate token');
       }
 
-      return await response.json();
+      const tokenData = await response.json();
+      console.log('Token generated successfully:', tokenData);
+      return tokenData;
     } catch (error) {
       console.error('Token generation error:', error);
       throw error;
@@ -87,6 +97,8 @@ function JoinRoomForm({ onJoin, error, setError, isConnecting, setIsConnecting }
 
   const createRoom = async (roomName) => {
     try {
+      console.log('Creating room:', roomName);
+      
       const response = await fetch(`${BACKEND_URL}/api/livekit/room`, {
         method: 'POST',
         headers: {
@@ -103,14 +115,24 @@ function JoinRoomForm({ onJoin, error, setError, isConnecting, setIsConnecting }
       });
 
       if (!response.ok) {
-        const errorData = await response.json();
+        const errorText = await response.text();
+        console.error('Room creation failed:', response.status, errorText);
+        let errorData;
+        try {
+          errorData = JSON.parse(errorText);
+        } catch {
+          errorData = { detail: `HTTP ${response.status}: ${errorText}` };
+        }
+        
         // Room might already exist, which is fine
         if (!errorData.detail?.includes('already exists')) {
           throw new Error(errorData.detail || 'Failed to create room');
         }
       }
 
-      return await response.json();
+      const roomData = await response.json();
+      console.log('Room created/exists:', roomData);
+      return roomData;
     } catch (error) {
       console.error('Room creation error:', error);
       // Don't throw error if room already exists
@@ -130,7 +152,7 @@ function JoinRoomForm({ onJoin, error, setError, isConnecting, setIsConnecting }
 
     setIsConnecting(true);
     setError('');
-
+    
     try {
       // Create room if requested
       if (createNew) {
@@ -149,10 +171,12 @@ function JoinRoomForm({ onJoin, error, setError, isConnecting, setIsConnecting }
       
       onJoin({
         ...tokenData,
-        participantName
+        participantName,
+        roomName
       });
       
     } catch (error) {
+      console.error('Join room error:', error);
       setError(error.message);
       setIsConnecting(false);
       setIsCreatingRoom(false);
@@ -278,11 +302,14 @@ function VideoRoom({ roomData, onLeave, setError }) {
   useEffect(() => {
     if (!roomData) return;
 
+    let roomInstance = null;
+
     const connectToRoom = async () => {
       try {
+        console.log('Connecting to room with data:', roomData);
         setConnectionState('connecting');
         
-        const roomInstance = new Room({
+        roomInstance = new Room({
           adaptiveStream: true,
           dynacast: true,
           videoCaptureDefaults: {
@@ -305,11 +332,22 @@ function VideoRoom({ roomData, onLeave, setError }) {
           setIsConnected(true);
           setConnectionState('connected');
           setLocalParticipant(roomInstance.localParticipant);
+          
+          // Update participants list with existing participants
+          const remoteParticipants = Array.from(roomInstance.remoteParticipants.values());
+          setParticipants(remoteParticipants);
+          console.log('Existing participants:', remoteParticipants.length);
         });
 
         roomInstance.on(RoomEvent.ParticipantConnected, (participant) => {
           console.log('Participant connected:', participant.identity);
-          setParticipants(prev => [...prev, participant]);
+          setParticipants(prev => {
+            // Avoid duplicates
+            if (prev.find(p => p.sid === participant.sid)) {
+              return prev;
+            }
+            return [...prev, participant];
+          });
         });
 
         roomInstance.on(RoomEvent.ParticipantDisconnected, (participant) => {
@@ -324,7 +362,7 @@ function VideoRoom({ roomData, onLeave, setError }) {
         });
 
         roomInstance.on(RoomEvent.LocalTrackPublished, (publication) => {
-          console.log('Local track published:', publication.trackSid);
+          console.log('Local track published:', publication.trackSid, publication.kind);
           
           if (publication.track) {
             if (publication.track.kind === Track.Kind.Video && localVideoRef.current) {
@@ -335,13 +373,39 @@ function VideoRoom({ roomData, onLeave, setError }) {
           }
         });
 
+        // Handle connection errors
+        roomInstance.on(RoomEvent.ConnectionQualityChanged, (quality, participant) => {
+          console.log('Connection quality changed:', quality, participant?.identity);
+        });
+
+        roomInstance.on(RoomEvent.Reconnecting, () => {
+          console.log('Reconnecting to room...');
+          setConnectionState('reconnecting');
+        });
+
+        roomInstance.on(RoomEvent.Reconnected, () => {
+          console.log('Reconnected to room');
+          setConnectionState('connected');
+        });
+
         // Connect to room
-        await roomInstance.connect(roomData.wsUrl, roomData.token);
+        const wsUrl = roomData.wsUrl || LIVEKIT_URL;
+        console.log('Connecting to:', wsUrl);
+        
+        await roomInstance.connect(wsUrl, roomData.token);
         setRoom(roomInstance);
         
+        console.log('Room connected, enabling camera and microphone...');
+        
         // Enable camera and microphone
-        await roomInstance.localParticipant.enableCameraAndMicrophone();
-
+        try {
+          await roomInstance.localParticipant.enableCameraAndMicrophone();
+          console.log('Camera and microphone enabled');
+        } catch (mediaError) {
+          console.error('Failed to enable camera/microphone:', mediaError);
+          setError(`Media access failed: ${mediaError.message}`);
+        }
+        
       } catch (error) {
         console.error('Failed to connect to room:', error);
         setError(`Failed to connect: ${error.message}`);
@@ -351,10 +415,11 @@ function VideoRoom({ roomData, onLeave, setError }) {
 
     connectToRoom();
 
-    // Cleanup
+    // Cleanup function
     return () => {
-      if (room) {
-        room.disconnect();
+      console.log('Cleaning up room connection');
+      if (roomInstance) {
+        roomInstance.disconnect();
       }
     };
   }, [roomData, setError]);
@@ -363,12 +428,16 @@ function VideoRoom({ roomData, onLeave, setError }) {
     const url = new URL(window.location);
     url.searchParams.set('room', roomData.roomName);
     navigator.clipboard.writeText(url.toString()).then(() => {
-      // You could add a toast notification here
       alert('Room link copied to clipboard!');
+    }).catch(err => {
+      console.error('Failed to copy link:', err);
+      // Fallback: show the link in an alert
+      alert(`Share this link: ${url.toString()}`);
     });
   };
 
   const leaveRoom = useCallback(() => {
+    console.log('Leaving room');
     if (room) {
       room.disconnect();
     }
@@ -382,6 +451,18 @@ function VideoRoom({ roomData, onLeave, setError }) {
           <div className="w-12 h-12 border-4 border-blue-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
           <h2 className="text-white text-xl font-semibold mb-2">Connecting to room...</h2>
           <p className="text-gray-400">Setting up your video and audio</p>
+        </div>
+      </div>
+    );
+  }
+
+  if (connectionState === 'reconnecting') {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-12 h-12 border-4 border-yellow-600 border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <h2 className="text-white text-xl font-semibold mb-2">Reconnecting...</h2>
+          <p className="text-gray-400">Connection lost, attempting to reconnect</p>
         </div>
       </div>
     );
@@ -411,7 +492,10 @@ function VideoRoom({ roomData, onLeave, setError }) {
       <div className="flex justify-between items-center mb-6">
         <div>
           <h1 className="text-white text-2xl font-bold">Room: {roomData.roomName}</h1>
-          <p className="text-gray-400">Participants: {participants.length + 1}</p>
+          <p className="text-gray-400">
+            Participants: {participants.length + 1} 
+            {connectionState === 'connected' && <span className="text-green-400 ml-2">● Connected</span>}
+          </p>
         </div>
         <button
           onClick={copyRoomLink}
@@ -429,6 +513,7 @@ function VideoRoom({ roomData, onLeave, setError }) {
             ref={localVideoRef}
             autoPlay
             muted
+            playsInline
             className="w-full rounded-lg shadow-lg bg-gray-700"
             style={{ maxHeight: '300px', objectFit: 'cover' }}
           />
@@ -465,54 +550,114 @@ function VideoRoom({ roomData, onLeave, setError }) {
 function RemoteParticipantVideo({ participant }) {
   const videoRef = useRef();
   const audioRef = useRef();
+  const [hasVideo, setHasVideo] = useState(false);
+  const [hasAudio, setHasAudio] = useState(false);
 
   useEffect(() => {
+    console.log('Setting up remote participant:', participant.identity);
+
+    // Function to attach track
+    const attachTrack = (track, ref) => {
+      if (track && ref.current) {
+        track.attach(ref.current);
+        console.log(`Attached ${track.kind} track for ${participant.identity}`);
+      }
+    };
+
     // Attach existing tracks
     participant.videoTracks.forEach((publication) => {
-      if (publication.track && videoRef.current) {
-        publication.track.attach(videoRef.current);
+      if (publication.track) {
+        attachTrack(publication.track, videoRef);
+        setHasVideo(true);
       }
     });
 
     participant.audioTracks.forEach((publication) => {
-      if (publication.track && audioRef.current) {
-        publication.track.attach(audioRef.current);
+      if (publication.track) {
+        attachTrack(publication.track, audioRef);
+        setHasAudio(true);
       }
     });
 
     // Handle track subscriptions
     const handleTrackSubscribed = (track, publication) => {
-      if (track.kind === Track.Kind.Video && videoRef.current) {
-        track.attach(videoRef.current);
-      } else if (track.kind === Track.Kind.Audio && audioRef.current) {
-        track.attach(audioRef.current);
+      console.log(`Track subscribed: ${track.kind} from ${participant.identity}`);
+      
+      if (track.kind === Track.Kind.Video) {
+        attachTrack(track, videoRef);
+        setHasVideo(true);
+      } else if (track.kind === Track.Kind.Audio) {
+        attachTrack(track, audioRef);
+        setHasAudio(true);
       }
     };
 
-    const handleTrackUnsubscribed = (track) => {
+    const handleTrackUnsubscribed = (track, publication) => {
+      console.log(`Track unsubscribed: ${track.kind} from ${participant.identity}`);
       track.detach();
+      
+      if (track.kind === Track.Kind.Video) {
+        setHasVideo(false);
+      } else if (track.kind === Track.Kind.Audio) {
+        setHasAudio(false);
+      }
     };
 
+    const handleTrackMuted = (publication) => {
+      console.log(`Track muted: ${publication.kind} from ${participant.identity}`);
+    };
+
+    const handleTrackUnmuted = (publication) => {
+      console.log(`Track unmuted: ${publication.kind} from ${participant.identity}`);
+    };
+
+    // Add event listeners
     participant.on(ParticipantEvent.TrackSubscribed, handleTrackSubscribed);
     participant.on(ParticipantEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+    participant.on(ParticipantEvent.TrackMuted, handleTrackMuted);
+    participant.on(ParticipantEvent.TrackUnmuted, handleTrackUnmuted);
 
+    // Cleanup
     return () => {
       participant.off(ParticipantEvent.TrackSubscribed, handleTrackSubscribed);
       participant.off(ParticipantEvent.TrackUnsubscribed, handleTrackUnsubscribed);
+      participant.off(ParticipantEvent.TrackMuted, handleTrackMuted);
+      participant.off(ParticipantEvent.TrackUnmuted, handleTrackUnmuted);
     };
   }, [participant]);
 
   return (
     <div className="relative group">
-      <video 
-        ref={videoRef}
-        autoPlay
-        className="w-full rounded-lg shadow-lg bg-gray-700"
-        style={{ maxHeight: '300px', objectFit: 'cover' }}
-      />
+      <div className="w-full rounded-lg shadow-lg bg-gray-700 relative" style={{ height: '300px' }}>
+        <video 
+          ref={videoRef}
+          autoPlay
+          playsInline
+          className="w-full h-full rounded-lg object-cover"
+          style={{ display: hasVideo ? 'block' : 'none' }}
+        />
+        {!hasVideo && (
+          <div className="w-full h-full flex items-center justify-center">
+            <div className="text-center">
+              <div className="w-16 h-16 bg-gray-600 rounded-full flex items-center justify-center mb-2">
+                <span className="text-2xl">👤</span>
+              </div>
+              <p className="text-white text-sm">Camera off</p>
+            </div>
+          </div>
+        )}
+      </div>
       <audio ref={audioRef} autoPlay />
       <div className="absolute bottom-2 left-2 bg-black bg-opacity-75 text-white px-3 py-1 rounded-full text-sm font-medium">
         <span className="text-blue-400">●</span> {participant.identity}
+      </div>
+      <div className="absolute top-2 right-2 flex gap-1">
+        {hasVideo && (
+          <div className="bg-green-600 text-white px-2 py-1 rounded text-xs">Video</div>
+        )}
+        {hasAudio && (
+          <div className="bg-blue-600 text-white px-2 py-1 rounded text-xs">Audio</div>
+        )}
       </div>
     </div>
   );
@@ -527,6 +672,7 @@ function LiveKitControls({ room, localParticipant, onLeave }) {
     try {
       await localParticipant.setCameraEnabled(!isVideoEnabled);
       setIsVideoEnabled(!isVideoEnabled);
+      console.log('Video toggled:', !isVideoEnabled);
     } catch (error) {
       console.error('Error toggling video:', error);
     }
@@ -536,6 +682,7 @@ function LiveKitControls({ room, localParticipant, onLeave }) {
     try {
       await localParticipant.setMicrophoneEnabled(!isAudioEnabled);
       setIsAudioEnabled(!isAudioEnabled);
+      console.log('Audio toggled:', !isAudioEnabled);
     } catch (error) {
       console.error('Error toggling audio:', error);
     }
