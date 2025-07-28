@@ -18,7 +18,7 @@ function App() {
         </Route>
         
         {/* <Route path="admin-room" element={<AdminRoom />} /> */}
-        <Route path="/room/:roomId" element={<Room />} />
+        <Route path="/room" element={<Room />} />
       </Routes>
     </BrowserRouter>
   );
