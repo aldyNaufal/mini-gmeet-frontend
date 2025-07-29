@@ -16,63 +16,119 @@ const api = axios.create({
     'Accept': 'application/json',
   },
   timeout: 30000,
-  // Add withCredentials if you're using authentication
-  withCredentials: false, // Set to true if you need cookies/auth
+  withCredentials: false,
 });
 
-// Request interceptor for logging and debugging
+// Enhanced request interceptor with better debugging
 api.interceptors.request.use(
   (config) => {
-    console.log(`API Request: ${config.method?.toUpperCase()} ${config.baseURL}${config.url}`);
-    console.log('Request data:', config.data);
-    console.log('Request headers:', config.headers);
+    const fullUrl = `${config.baseURL}${config.url}`;
+    console.log(`🚀 API Request: ${config.method?.toUpperCase()} ${fullUrl}`);
+    console.log('📤 Request data:', config.data);
+    console.log('📋 Request headers:', config.headers);
     return config;
   },
   (error) => {
-    console.error('API Request Error:', error);
+    console.error('❌ API Request Error:', error);
     return Promise.reject(error);
   }
 );
 
-// Response interceptor for error handling
+// Enhanced response interceptor with better error handling
 api.interceptors.response.use(
   (response) => {
-    console.log(`API Response: ${response.config.method?.toUpperCase()} ${response.config.url}`, response.data);
+    const fullUrl = `${response.config.baseURL}${response.config.url}`;
+    console.log(`✅ API Response: ${response.config.method?.toUpperCase()} ${fullUrl}`, response.data);
     return response;
   },
   (error) => {
-    console.error('API Response Error Details:', {
+    const fullUrl = error.config ? `${error.config.baseURL}${error.config.url}` : 'Unknown URL';
+    
+    console.error('❌ API Response Error Details:', {
       message: error.message,
-      response: error.response?.data,
+      url: fullUrl,
+      method: error.config?.method?.toUpperCase(),
       status: error.response?.status,
+      statusText: error.response?.statusText,
+      responseData: error.response?.data,
       headers: error.response?.headers,
-      config: {
-        url: error.config?.url,
-        method: error.config?.method,
-        baseURL: error.config?.baseURL
-      }
     });
     
-    // Handle specific error types
+    // Enhanced error type handling
     if (error.code === 'ERR_NETWORK') {
-      console.error('Network Error - Check if backend is running and CORS is configured');
+      console.error('🌐 Network Error - Check if backend is running and CORS is configured');
     } else if (error.response?.status === 404) {
-      console.error('404 Error - Endpoint not found. Check your backend routes');
+      console.error('🔍 404 Error - Endpoint not found:', fullUrl);
+      console.error('Available endpoints should be:', [
+        `${API_BASE_URL}/token`,
+        `${API_BASE_URL}/room`,
+        `${API_BASE_URL}/rooms`,
+        `${API_BASE_URL}/room/{room_name}`,
+        `${API_BASE_URL}/room/{room_name}/participants`
+      ]);
     } else if (error.response?.status === 0 || error.message.includes('CORS')) {
-      console.error('CORS Error - Backend needs to allow your frontend origin');
+      console.error('🚫 CORS Error - Backend needs to allow your frontend origin');
+    } else if (error.response?.status >= 500) {
+      console.error('🔥 Server Error - Backend is having issues');
     }
     
     return Promise.reject(error);
   }
 );
 
-// API functions with better error handling
+/**
+ * Test backend connectivity
+ */
+export const testBackendConnection = async () => {
+  try {
+    console.log('🧪 Testing backend connection...');
+    
+    // Test the base health endpoint
+    const baseUrl = API_BASE_URL.replace('/api/livekit', '');
+    const healthResponse = await axios.get(`${baseUrl}/health`, {
+      timeout: 10000,
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    console.log('✅ Health check successful:', healthResponse.data);
+    
+    // Test the API base route
+    const apiResponse = await axios.get(`${baseUrl}/`, {
+      timeout: 10000,
+      headers: { 'Accept': 'application/json' }
+    });
+    
+    console.log('✅ API base route successful:', apiResponse.data);
+    
+    return {
+      health: healthResponse.data,
+      api: apiResponse.data,
+      success: true
+    };
+  } catch (error) {
+    console.error('❌ Backend connection test failed:', error);
+    return {
+      success: false,
+      error: error.message,
+      status: error.response?.status
+    };
+  }
+};
+
 /**
  * Generate access token for joining a room
  */
 export const generateToken = async ({ roomName, participantName, metadata = null }) => {
   try {
-    console.log('Generating token for:', { roomName, participantName });
+    console.log('🎫 Generating token for:', { roomName, participantName });
+    
+    // Validate inputs
+    if (!roomName?.trim()) {
+      throw new Error('Room name is required');
+    }
+    if (!participantName?.trim()) {
+      throw new Error('Participant name is required');
+    }
     
     const response = await api.post('/token', {
       roomName: roomName.trim(),
@@ -80,20 +136,23 @@ export const generateToken = async ({ roomName, participantName, metadata = null
       metadata
     });
     
-    console.log('Token generated successfully:', response.data);
+    console.log('✅ Token generated successfully:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Token generation failed:', error);
+    console.error('❌ Token generation failed:', error);
     
     // Provide more specific error messages
     if (error.code === 'ERR_NETWORK') {
-      throw new Error('Cannot connect to server. Please check your internet connection.');
+      throw new Error('Cannot connect to server. Please check your internet connection and ensure the backend is running.');
     } else if (error.response?.status === 404) {
-      throw new Error('Token endpoint not found. Please check backend configuration.');
+      throw new Error(`Token endpoint not found. Expected: ${API_BASE_URL}/token. Please check backend configuration.`);
+    } else if (error.response?.status === 500) {
+      throw new Error('Server error while generating token. Please check backend logs.');
     } else if (error.message.includes('CORS')) {
       throw new Error('CORS error. Please contact support.');
     } else {
-      throw new Error(error.response?.data?.detail || error.message || 'Failed to generate token');
+      const serverMessage = error.response?.data?.detail || error.response?.data?.message;
+      throw new Error(serverMessage || error.message || 'Failed to generate token');
     }
   }
 };
@@ -103,7 +162,12 @@ export const generateToken = async ({ roomName, participantName, metadata = null
  */
 export const createRoom = async ({ roomName, maxParticipants = 50, metadata = null }) => {
   try {
-    console.log('Creating room:', { roomName, maxParticipants });
+    console.log('🏠 Creating room:', { roomName, maxParticipants });
+    
+    // Validate inputs
+    if (!roomName?.trim()) {
+      throw new Error('Room name is required');
+    }
     
     const response = await api.post('/room', {
       roomName: roomName.trim(),
@@ -111,19 +175,22 @@ export const createRoom = async ({ roomName, maxParticipants = 50, metadata = nu
       metadata
     });
     
-    console.log('Room created successfully:', response.data);
+    console.log('✅ Room created successfully:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Room creation failed:', error);
+    console.error('❌ Room creation failed:', error);
     
     if (error.code === 'ERR_NETWORK') {
-      throw new Error('Cannot connect to server. Please check your internet connection.');
+      throw new Error('Cannot connect to server. Please check your internet connection and ensure the backend is running.');
     } else if (error.response?.status === 404) {
-      throw new Error('Room endpoint not found. Please check backend configuration.');
+      throw new Error(`Room endpoint not found. Expected: ${API_BASE_URL}/room. Please check backend configuration.`);
     } else if (error.response?.status === 409) {
-      throw new Error('Room already exists');
+      throw new Error('Room already exists with this name');
+    } else if (error.response?.status === 500) {
+      throw new Error('Server error while creating room. Please check backend logs.');
     } else {
-      throw new Error(error.response?.data?.detail || error.message || 'Failed to create room');
+      const serverMessage = error.response?.data?.detail || error.response?.data?.message;
+      throw new Error(serverMessage || error.message || 'Failed to create room');
     }
   }
 };
@@ -133,17 +200,20 @@ export const createRoom = async ({ roomName, maxParticipants = 50, metadata = nu
  */
 export const getRooms = async () => {
   try {
+    console.log('📋 Getting rooms list...');
     const response = await api.get('/rooms');
+    console.log('✅ Rooms retrieved successfully:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Get rooms failed:', error);
+    console.error('❌ Get rooms failed:', error);
     
     if (error.code === 'ERR_NETWORK') {
       throw new Error('Cannot connect to server. Please check your internet connection.');
     } else if (error.response?.status === 404) {
-      throw new Error('Rooms endpoint not found. Please check backend configuration.');
+      throw new Error(`Rooms endpoint not found. Expected: ${API_BASE_URL}/rooms`);
     } else {
-      throw new Error(error.response?.data?.detail || error.message || 'Failed to get rooms');
+      const serverMessage = error.response?.data?.detail || error.response?.data?.message;
+      throw new Error(serverMessage || error.message || 'Failed to get rooms');
     }
   }
 };
@@ -153,11 +223,14 @@ export const getRooms = async () => {
  */
 export const getRoomInfo = async (roomName) => {
   try {
-    const response = await api.get(`/room/${roomName}`);
+    console.log('ℹ️ Getting room info for:', roomName);
+    const response = await api.get(`/room/${encodeURIComponent(roomName)}`);
+    console.log('✅ Room info retrieved:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Get room info failed:', error);
-    throw new Error(error.response?.data?.detail || 'Failed to get room info');
+    console.error('❌ Get room info failed:', error);
+    const serverMessage = error.response?.data?.detail || error.response?.data?.message;
+    throw new Error(serverMessage || 'Failed to get room info');
   }
 };
 
@@ -166,11 +239,14 @@ export const getRoomInfo = async (roomName) => {
  */
 export const deleteRoom = async (roomName) => {
   try {
-    const response = await api.delete(`/room/${roomName}`);
+    console.log('🗑️ Deleting room:', roomName);
+    const response = await api.delete(`/room/${encodeURIComponent(roomName)}`);
+    console.log('✅ Room deleted:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Delete room failed:', error);
-    throw new Error(error.response?.data?.detail || 'Failed to delete room');
+    console.error('❌ Delete room failed:', error);
+    const serverMessage = error.response?.data?.detail || error.response?.data?.message;
+    throw new Error(serverMessage || 'Failed to delete room');
   }
 };
 
@@ -179,11 +255,14 @@ export const deleteRoom = async (roomName) => {
  */
 export const getRoomParticipants = async (roomName) => {
   try {
-    const response = await api.get(`/room/${roomName}/participants`);
+    console.log('👥 Getting participants for room:', roomName);
+    const response = await api.get(`/room/${encodeURIComponent(roomName)}/participants`);
+    console.log('✅ Participants retrieved:', response.data);
     return response.data;
   } catch (error) {
-    console.error('Get participants failed:', error);
-    throw new Error(error.response?.data?.detail || 'Failed to get participants');
+    console.error('❌ Get participants failed:', error);
+    const serverMessage = error.response?.data?.detail || error.response?.data?.message;
+    throw new Error(serverMessage || 'Failed to get participants');
   }
 };
 
@@ -192,11 +271,12 @@ export const getRoomParticipants = async (roomName) => {
  */
 export const muteParticipant = async (roomName, participantIdentity) => {
   try {
-    const response = await api.post(`/room/${roomName}/mute/${participantIdentity}`);
+    const response = await api.post(`/room/${encodeURIComponent(roomName)}/mute/${encodeURIComponent(participantIdentity)}`);
     return response.data;
   } catch (error) {
-    console.error('Mute participant failed:', error);
-    throw new Error(error.response?.data?.detail || 'Failed to mute participant');
+    console.error('❌ Mute participant failed:', error);
+    const serverMessage = error.response?.data?.detail || error.response?.data?.message;
+    throw new Error(serverMessage || 'Failed to mute participant');
   }
 };
 
@@ -205,11 +285,12 @@ export const muteParticipant = async (roomName, participantIdentity) => {
  */
 export const unmuteParticipant = async (roomName, participantIdentity) => {
   try {
-    const response = await api.post(`/room/${roomName}/unmute/${participantIdentity}`);
+    const response = await api.post(`/room/${encodeURIComponent(roomName)}/unmute/${encodeURIComponent(participantIdentity)}`);
     return response.data;
   } catch (error) {
-    console.error('Unmute participant failed:', error);
-    throw new Error(error.response?.data?.detail || 'Failed to unmute participant');
+    console.error('❌ Unmute participant failed:', error);
+    const serverMessage = error.response?.data?.detail || error.response?.data?.message;
+    throw new Error(serverMessage || 'Failed to unmute participant');
   }
 };
 
@@ -218,55 +299,13 @@ export const unmuteParticipant = async (roomName, participantIdentity) => {
  */
 export const kickParticipant = async (roomName, participantIdentity) => {
   try {
-    const response = await api.post(`/room/${roomName}/kick/${participantIdentity}`);
+    const response = await api.post(`/room/${encodeURIComponent(roomName)}/kick/${encodeURIComponent(participantIdentity)}`);
     return response.data;
   } catch (error) {
-    console.error('Kick participant failed:', error);
-    throw new Error(error.response?.data?.detail || 'Failed to kick participant');
+    console.error('❌ Kick participant failed:', error);
+    const serverMessage = error.response?.data?.detail || error.response?.data?.message;
+    throw new Error(serverMessage || 'Failed to kick participant');
   }
 };
 
-/**
- * Check backend health
- */
-export const checkHealth = async () => {
-  try {
-    // Remove /api/livekit from the base URL for health check
-    const baseUrl = API_BASE_URL.replace('/api/livekit', '');
-    console.log('Health check URL:', `${baseUrl}/health`);
-    
-    const response = await axios.get(`${baseUrl}/health`, {
-      timeout: 10000,
-      headers: {
-        'Accept': 'application/json',
-      }
-    });
-    
-    console.log('Health check successful:', response.data);
-    return response.data;
-  } catch (error) {
-    console.error('Health check failed:', error);
-    
-    if (error.code === 'ERR_NETWORK') {
-      throw new Error('Backend server is not accessible. Please try again later.');
-    } else {
-      throw new Error('Backend health check failed');
-    }
-  }
-};
-
-// Test function to verify backend connectivity
-export const testConnection = async () => {
-  try {
-    console.log('Testing backend connection...');
-    const health = await checkHealth();
-    console.log('Backend is healthy:', health);
-    return true;
-  } catch (error) {
-    console.error('Backend connection test failed:', error);
-    return false;
-  }
-};
-
-// Export the configured axios instance for custom requests if needed
 export default api;
