@@ -30,10 +30,23 @@ const VideoConference = () => {
   const remoteVideosRef = useRef({});
 
   // API Base URL - adjust this to match your backend
-  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+    (import.meta.env.PROD ? 'https://mini-gmeet-backend-production.up.railway.app/api' : 'http://localhost:8000/api');
+
+  // Debug: Log the API URL (remove in production)
+  console.log('API_BASE_URL:', API_BASE_URL);
+  console.log('Environment:', import.meta.env.MODE);
 
   useEffect(() => {
     fetchRooms();
+    
+    // Check for URL parameters
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomFromUrl = urlParams.get('room');
+    const nameFromUrl = urlParams.get('name');
+    
+    if (roomFromUrl) setRoomName(roomFromUrl);
+    if (nameFromUrl) setParticipantName(nameFromUrl);
   }, []);
 
   const fetchRooms = async () => {
