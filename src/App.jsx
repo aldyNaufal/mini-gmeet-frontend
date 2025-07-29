@@ -5,7 +5,6 @@ import Home from './pages/home/Home'
 import Layout from './components/Layout';
 import InterviewResult from './pages/InterviewResult';
 import VideoInterview from './pages/VideoInterview';
-import Room from './pages/CreateRoom';
 
 function App() {
   return (
@@ -19,8 +18,8 @@ function App() {
         </Route>
         
         {/* <Route path="admin-room" element={<AdminRoom />} /> */}
-        <Route path="/room" element={<Room />} />
-        <Route path="/room/:roomName" element={<MeetingRoom />} />
+        {/* <Route path="/room" element={<Room />} /> */}
+        <Route path="/room" element={<MeetingRoom />} />
       </Routes>
     </BrowserRouter>
   );

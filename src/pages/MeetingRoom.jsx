@@ -1,378 +1,498 @@
-import React, { useEffect, useState, useCallback } from 'react';
-import { useParams, useNavigate, useSearchParams } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
 import { 
-  LiveKitRoom, 
-  VideoConference, 
-  RoomAudioRenderer,
-  useRoomContext,
-  useTracks
-} from '@livekit/components-react';
-import '@livekit/components-styles';
-import { 
-  Mic, 
-  MicOff, 
-  Video, 
-  VideoOff, 
-  PhoneOff, 
-  Users, 
-  Settings,
-  Monitor,
-  Copy,
-  Check
-} from 'lucide-react';
-import { Room, Track } from 'livekit-client';
-import toast from 'react-hot-toast';
-import { generateToken } from '../config/api';
-import ParticipantsList from '../components/ParticipantsList';
+  Room, 
+  LocalParticipant, 
+  RemoteParticipant, 
+  Track,
+  ConnectionState,
+  RoomEvent,
+  TrackPublication,
+  RemoteTrackPublication,
+  LocalTrackPublication
+} from 'livekit-client';
 
-const MeetingRoom = () => {
-  const { roomName } = useParams();
-  const navigate = useNavigate();
-  const [searchParams] = useSearchParams();
-  const participantName = searchParams.get('participant');
-  
-  const [token, setToken] = useState('');
-  const [wsUrl, setWsUrl] = useState('');
-  const [isConnecting, setIsConnecting] = useState(true);
+const VideoConference = () => {
+  const [room, setRoom] = useState(null);
+  const [participants, setParticipants] = useState([]);
+  const [localParticipant, setLocalParticipant] = useState(null);
+  const [connectionState, setConnectionState] = useState('disconnected');
+  const [isConnecting, setIsConnecting] = useState(false);
   const [error, setError] = useState('');
+  const [roomName, setRoomName] = useState('');
+  const [participantName, setParticipantName] = useState('');
+  const [isAudioEnabled, setIsAudioEnabled] = useState(true);
+  const [isVideoEnabled, setIsVideoEnabled] = useState(true);
+  const [isMuted, setIsMuted] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
-  const [showParticipants, setShowParticipants] = useState(false);
-  const [copied, setCopied] = useState(false);
-  const [retryCount, setRetryCount] = useState(0);
-  const [connectionAttempts, setConnectionAttempts] = useState(0);
+  const [roomsList, setRoomsList] = useState([]);
+  
+  const localVideoRef = useRef(null);
+  const remoteVideosRef = useRef({});
 
-  const MAX_RETRIES = 3;
+  // API Base URL - adjust this to match your backend
+  const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000/api';
 
   useEffect(() => {
-    if (!participantName || !roomName) {
-      console.error('Missing required parameters:', { participantName, roomName });
-      navigate('/');
-      return;
-    }
+    fetchRooms();
+  }, []);
 
-    const getToken = async (attempt = 1) => {
-      try {
-        setIsConnecting(true);
-        setError('');
-        
-        console.log(`Attempting to get token for room: ${roomName}, participant: ${participantName}, attempt: ${attempt}`);
-        
-        // Generate unique participant name to avoid conflicts
-        const uniqueParticipantName = `${participantName}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
-        
-        const response = await generateToken({
-          roomName: roomName.trim(),
-          participantName: uniqueParticipantName,
-          metadata: JSON.stringify({
-            displayName: participantName,
-            joinedAt: new Date().toISOString()
-          })
-        });
-        
-        console.log('Token generation successful:', response);
-        
-        if (!response.token || !response.wsUrl) {
-          throw new Error('Invalid response: missing token or wsUrl');
-        }
-        
-        setToken(response.token);
-        setWsUrl(response.wsUrl);
-        setError('');
-        setRetryCount(0);
-        
-      } catch (err) {
-        console.error(`Token generation attempt ${attempt} failed:`, err);
-        
-        if (attempt < MAX_RETRIES) {
-          console.log(`Retrying token generation... (${attempt + 1}/${MAX_RETRIES})`);
-          setRetryCount(attempt);
-          setTimeout(() => getToken(attempt + 1), 2000 * attempt); // Exponential backoff
-        } else {
-          const errorMessage = err.response?.data?.detail || err.message || 'Failed to join room';
-          setError(`Unable to join room after ${MAX_RETRIES} attempts: ${errorMessage}`);
-          toast.error('Failed to join room. Please try again.');
-        }
-      } finally {
-        if (attempt >= MAX_RETRIES) {
-          setIsConnecting(false);
-        }
-      }
-    };
-
-    getToken();
-  }, [roomName, participantName, navigate]);
-
-  const handleDisconnect = useCallback(() => {
-    console.log('User disconnecting from room');
-    navigate('/');
-  }, [navigate]);
-
-  const handleConnectionError = useCallback((error) => {
-    console.error('LiveKit connection error:', error);
-    setConnectionAttempts(prev => prev + 1);
-    
-    if (connectionAttempts < 2) {
-      toast.error('Connection failed, retrying...');
-      // Force token regeneration
-      window.location.reload();
-    } else {
-      setError('Failed to connect to the meeting room. Please check your internet connection and try again.');
-      toast.error('Unable to connect to the meeting room');
-    }
-  }, [connectionAttempts]);
-
-  const copyRoomLink = async () => {
-    const roomLink = `${window.location.origin}/room/${roomName}`;
+  const fetchRooms = async () => {
     try {
-      await navigator.clipboard.writeText(roomLink);
-      setCopied(true);
-      toast.success('Room link copied to clipboard!');
-      setTimeout(() => setCopied(false), 2000);
-    } catch (err) {
-      toast.error('Failed to copy room link');
+      const response = await fetch(`${API_BASE_URL}/rooms`);
+      const data = await response.json();
+      setRoomsList(data.rooms || []);
+    } catch (error) {
+      console.error('Error fetching rooms:', error);
     }
   };
 
-  if (isConnecting) {
+  const generateToken = async (roomName, participantName) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/token`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomName,
+          participantName,
+          maxParticipants: 10
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error generating token:', error);
+      throw error;
+    }
+  };
+
+  const connectToRoom = async () => {
+    if (!roomName.trim() || !participantName.trim()) {
+      setError('Please enter both room name and participant name');
+      return;
+    }
+
+    setIsConnecting(true);
+    setError('');
+
+    try {
+      // Generate token
+      const tokenData = await generateToken(roomName.trim(), participantName.trim());
+      
+      // Create room instance
+      const newRoom = new Room({
+        adaptiveStream: true,
+        dynacast: true,
+        publishDefaults: {
+          videoSimulcast: true,
+          videoCodec: 'vp8',
+        },
+      });
+
+      // Set up event listeners
+      setupRoomListeners(newRoom);
+
+      // Connect to room
+      await newRoom.connect(tokenData.wsUrl, tokenData.token);
+      
+      setRoom(newRoom);
+      setConnectionState('connected');
+      
+      // Enable camera and microphone
+      await newRoom.localParticipant.enableCameraAndMicrophone();
+      
+      setLocalParticipant(newRoom.localParticipant);
+      setParticipants([...newRoom.remoteParticipants.values()]);
+
+    } catch (error) {
+      console.error('Error connecting to room:', error);
+      setError(`Failed to connect: ${error.message}`);
+    } finally {
+      setIsConnecting(false);
+    }
+  };
+
+  const setupRoomListeners = (room) => {
+    room.on(RoomEvent.Connected, () => {
+      console.log('Connected to room');
+      setConnectionState('connected');
+    });
+
+    room.on(RoomEvent.Disconnected, () => {
+      console.log('Disconnected from room');
+      setConnectionState('disconnected');
+      cleanup();
+    });
+
+    room.on(RoomEvent.ParticipantConnected, (participant) => {
+      console.log('Participant connected:', participant.identity);
+      setParticipants(prev => [...prev, participant]);
+      setupParticipantListeners(participant);
+    });
+
+    room.on(RoomEvent.ParticipantDisconnected, (participant) => {
+      console.log('Participant disconnected:', participant.identity);
+      setParticipants(prev => prev.filter(p => p.sid !== participant.sid));
+    });
+
+    room.on(RoomEvent.LocalTrackPublished, (publication, participant) => {
+      console.log('Local track published:', publication.trackSid);
+      attachTrack(publication, participant, true);
+    });
+
+    room.on(RoomEvent.TrackSubscribed, (track, publication, participant) => {
+      console.log('Track subscribed:', publication.trackSid);
+      attachTrack(publication, participant, false);
+    });
+
+    room.on(RoomEvent.TrackUnsubscribed, (track, publication, participant) => {
+      console.log('Track unsubscribed:', publication.trackSid);
+      detachTrack(publication, participant);
+    });
+
+    // Set up local participant listeners
+    setupParticipantListeners(room.localParticipant);
+  };
+
+  const setupParticipantListeners = (participant) => {
+    participant.videoTrackPublications.forEach((publication) => {
+      if (publication.track) {
+        attachTrack(publication, participant, participant === room?.localParticipant);
+      }
+    });
+
+    participant.audioTrackPublications.forEach((publication) => {
+      if (publication.track) {
+        attachTrack(publication, participant, participant === room?.localParticipant);
+      }
+    });
+  };
+
+  const attachTrack = (publication, participant, isLocal) => {
+    const track = publication.track;
+    if (!track) return;
+
+    if (track.kind === Track.Kind.Video) {
+      const videoElement = isLocal ? localVideoRef.current : remoteVideosRef.current[participant.sid];
+      if (videoElement) {
+        track.attach(videoElement);
+      }
+    } else if (track.kind === Track.Kind.Audio && !isLocal) {
+      // Only attach remote audio, not local (to avoid echo)
+      track.attach();
+    }
+  };
+
+  const detachTrack = (publication, participant) => {
+    const track = publication.track;
+    if (!track) return;
+
+    track.detach();
+  };
+
+  const toggleAudio = async () => {
+    if (room && localParticipant) {
+      const enabled = !isMuted;
+      await localParticipant.setMicrophoneEnabled(enabled);
+      setIsMuted(!enabled);
+    }
+  };
+
+  const toggleVideo = async () => {
+    if (room && localParticipant) {
+      const enabled = !isVideoEnabled;
+      await localParticipant.setCameraEnabled(enabled);
+      setIsVideoEnabled(enabled);
+    }
+  };
+
+  const leaveRoom = async () => {
+    if (room) {
+      await room.disconnect();
+    }
+    cleanup();
+  };
+
+  const cleanup = () => {
+    setRoom(null);
+    setParticipants([]);
+    setLocalParticipant(null);
+    setConnectionState('disconnected');
+    setIsVideoEnabled(true);
+    setIsAudioEnabled(true);
+    setIsMuted(false);
+  };
+
+  const createNewRoom = async () => {
+    if (!roomName.trim()) {
+      setError('Please enter a room name');
+      return;
+    }
+
+    try {
+      const response = await fetch(`${API_BASE_URL}/room`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          roomName: roomName.trim(),
+          maxParticipants: 10,
+          metadata: 'Created from frontend'
+        }),
+      });
+
+      if (response.ok) {
+        await fetchRooms();
+        setError('');
+      } else {
+        const errorData = await response.json();
+        setError(`Failed to create room: ${errorData.detail}`);
+      }
+    } catch (error) {
+      console.error('Error creating room:', error);
+      setError('Failed to create room');
+    }
+  };
+
+  if (connectionState === 'connected' && room) {
     return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <h2 className="text-2xl font-semibold text-white mb-2">Joining Room</h2>
-          <p className="text-gray-400">Connecting to {roomName}...</p>
-          {retryCount > 0 && (
-            <p className="text-yellow-400 text-sm mt-2">
-              Retry attempt {retryCount}/{MAX_RETRIES}
+      <div className="min-h-screen bg-gray-900 text-white">
+        {/* Header */}
+        <div className="bg-gray-800 p-4 flex justify-between items-center">
+          <div>
+            <h1 className="text-xl font-bold">Room: {roomName}</h1>
+            <p className="text-sm text-gray-400">
+              Participants: {participants.length + 1}
             </p>
+          </div>
+          <div className="flex gap-4">
+            <button
+              onClick={toggleAudio}
+              className={`p-3 rounded-full ${
+                isMuted ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
+              } transition-colors`}
+            >
+              {isMuted ? (
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM12.293 7.293a1 1 0 011.414 0L15 8.586l1.293-1.293a1 1 0 111.414 1.414L16.414 10l1.293 1.293a1 1 0 01-1.414 1.414L15 11.414l-1.293 1.293a1 1 0 01-1.414-1.414L13.586 10l-1.293-1.293a1 1 0 010-1.414z" clipRule="evenodd" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path fillRule="evenodd" d="M9.383 3.076A1 1 0 0110 4v12a1 1 0 01-1.707.707L4.586 13H2a1 1 0 01-1-1V8a1 1 0 011-1h2.586l3.707-3.707a1 1 0 011.09-.217zM14.657 2.929a1 1 0 011.414 0A9.972 9.972 0 0119 10a9.972 9.972 0 01-2.929 7.071 1 1 0 01-1.414-1.414A7.971 7.971 0 0017 10c0-2.21-.894-4.208-2.343-5.657a1 1 0 010-1.414zm-2.829 2.828a1 1 0 011.415 0A5.983 5.983 0 0115 10a5.984 5.984 0 01-1.757 4.243 1 1 0 01-1.415-1.415A3.984 3.984 0 0013 10a3.983 3.983 0 00-1.172-2.828 1 1 0 010-1.415z" clipRule="evenodd" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={toggleVideo}
+              className={`p-3 rounded-full ${
+                !isVideoEnabled ? 'bg-red-500 hover:bg-red-600' : 'bg-green-500 hover:bg-green-600'
+              } transition-colors`}
+            >
+              {!isVideoEnabled ? (
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M3.707 2.293a1 1 0 00-1.414 1.414l14 14a1 1 0 001.414-1.414l-1.473-1.473A2 2 0 0017 14V6a2 2 0 00-2-2h-6.586L3.707 2.293z" />
+                  <path d="M1 8a2 2 0 012-2h2.586l2 2H3v4.586l2 2H3a2 2 0 01-2-2V8z" />
+                </svg>
+              ) : (
+                <svg className="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                  <path d="M2 6a2 2 0 012-2h6a2 2 0 012 2v6a2 2 0 01-2 2H4a2 2 0 01-2-2V6zM14.553 7.106A1 1 0 0014 8v4a1 1 0 00.553.894l2 1A1 1 0 0018 13V7a1 1 0 00-1.447-.894l-2 1z" />
+                </svg>
+              )}
+            </button>
+            <button
+              onClick={leaveRoom}
+              className="px-4 py-2 bg-red-500 hover:bg-red-600 rounded-lg transition-colors"
+            >
+              Leave Room
+            </button>
+          </div>
+        </div>
+
+        {/* Video Grid */}
+        <div className="p-4">
+          <div className={`grid gap-4 ${
+            participants.length === 0 ? 'grid-cols-1' :
+            participants.length === 1 ? 'grid-cols-2' :
+            participants.length <= 4 ? 'grid-cols-2' :
+            'grid-cols-3'
+          }`}>
+            {/* Local Participant */}
+            <div className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video">
+              <video
+                ref={localVideoRef}
+                autoPlay
+                muted
+                playsInline
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 px-2 py-1 rounded text-sm">
+                {participantName} (You)
+                {isMuted && <span className="ml-2 text-red-400">🔇</span>}
+              </div>
+            </div>
+
+            {/* Remote Participants */}
+            {participants.map((participant) => (
+              <div
+                key={participant.sid}
+                className="relative bg-gray-800 rounded-lg overflow-hidden aspect-video"
+              >
+                <video
+                  ref={(el) => {
+                    if (el) {
+                      remoteVideosRef.current[participant.sid] = el;
+                    }
+                  }}
+                  autoPlay
+                  playsInline
+                  className="w-full h-full object-cover"
+                />
+                <div className="absolute bottom-4 left-4 bg-black bg-opacity-50 px-2 py-1 rounded text-sm">
+                  {participant.identity}
+                  {participant.isMuted && <span className="ml-2 text-red-400">🔇</span>}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+
+        {/* Error Display */}
+        {error && (
+          <div className="fixed bottom-4 right-4 bg-red-500 text-white p-4 rounded-lg max-w-sm">
+            {error}
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-gradient-to-br from-blue-900 via-purple-900 to-indigo-900 flex items-center justify-center p-4">
+      <div className="bg-white rounded-2xl shadow-2xl p-8 w-full max-w-md">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold text-gray-800 mb-2">
+            Video Conference
+          </h1>
+          <p className="text-gray-600">Join or create a room to get started</p>
+        </div>
+
+        <div className="space-y-6">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Your Name
+            </label>
+            <input
+              type="text"
+              value={participantName}
+              onChange={(e) => setParticipantName(e.target.value)}
+              placeholder="Enter your name"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+              disabled={isConnecting}
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">
+              Room Name
+            </label>
+            <input
+              type="text"
+              value={roomName}
+              onChange={(e) => setRoomName(e.target.value)}
+              placeholder="Enter room name"
+              className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+              disabled={isConnecting}
+            />
+          </div>
+
+          {roomsList.length > 0 && (
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                Or select existing room
+              </label>
+              <select
+                value={roomName}
+                onChange={(e) => setRoomName(e.target.value)}
+                className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent outline-none transition-all"
+                disabled={isConnecting}
+              >
+                <option value="">Select a room...</option>
+                {roomsList.map((room) => (
+                  <option key={room.sid} value={room.name}>
+                    {room.name} ({room.numParticipants} participants)
+                  </option>
+                ))}
+              </select>
+            </div>
+          )}
+
+          <div className="flex gap-3">
+            <button
+              onClick={connectToRoom}
+              disabled={isConnecting || !roomName.trim() || !participantName.trim()}
+              className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold py-3 px-6 rounded-lg transition-colors duration-200 flex items-center justify-center"
+            >
+              {isConnecting ? (
+                <>
+                  <svg className="animate-spin -ml-1 mr-3 h-5 w-5 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                  </svg>
+                  Connecting...
+                </>
+              ) : (
+                'Join Room'
+              )}
+            </button>
+            <button
+              onClick={createNewRoom}
+              disabled={isConnecting || !roomName.trim()}
+              className="px-4 py-3 bg-green-600 hover:bg-green-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors duration-200"
+            >
+              Create
+            </button>
+          </div>
+
+          {error && (
+            <div className="bg-red-50 border border-red-200 text-red-700 px-4 py-3 rounded-lg">
+              {error}
+            </div>
+          )}
+
+          <div className="text-center">
+            <button
+              onClick={() => setShowSettings(!showSettings)}
+              className="text-sm text-gray-500 hover:text-gray-700 transition-colors"
+            >
+              Advanced Settings
+            </button>
+          </div>
+
+          {showSettings && (
+            <div className="bg-gray-50 p-4 rounded-lg space-y-3">
+              <div className="text-sm text-gray-600">
+                <p><strong>API Endpoint:</strong> {API_BASE_URL}</p>
+                <p><strong>Available Rooms:</strong> {roomsList.length}</p>
+              </div>
+              <button
+                onClick={fetchRooms}
+                className="w-full text-sm bg-gray-200 hover:bg-gray-300 text-gray-700 py-2 px-4 rounded transition-colors"
+              >
+                Refresh Rooms
+              </button>
+            </div>
           )}
         </div>
       </div>
-    );
-  }
-
-  if (error) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center max-w-md mx-auto p-6">
-          <div className="text-red-500 text-6xl mb-4">⚠️</div>
-          <h2 className="text-2xl font-semibold text-white mb-2">Connection Failed</h2>
-          <p className="text-gray-400 mb-6">{error}</p>
-          <div className="space-y-3">
-            <button
-              onClick={() => window.location.reload()}
-              className="bg-blue-600 hover:bg-blue-700 text-white px-6 py-2 rounded-lg font-medium transition-colors w-full"
-            >
-              Try Again
-            </button>
-            <button
-              onClick={() => navigate('/')}
-              className="bg-gray-600 hover:bg-gray-700 text-white px-6 py-2 rounded-lg font-medium transition-colors w-full"
-            >
-              Go Back
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
-  // Add validation for token and wsUrl before rendering LiveKitRoom
-  if (!token || !wsUrl) {
-    return (
-      <div className="min-h-screen bg-gray-900 flex items-center justify-center">
-        <div className="text-center">
-          <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-500 mx-auto mb-4"></div>
-          <h2 className="text-2xl font-semibold text-white mb-2">Loading...</h2>
-          <p className="text-gray-400">Preparing room connection...</p>
-        </div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="h-screen bg-gray-900 flex flex-col">
-      {/* Header */}
-      <header className="bg-gray-800 border-b border-gray-700 px-4 py-3 flex items-center justify-between">
-        <div>
-          <h1 className="text-white font-semibold text-lg">{roomName}</h1>
-          <p className="text-gray-400 text-sm">Welcome, {participantName}</p>
-        </div>
-        
-        <div className="flex items-center gap-2">
-          <button
-            onClick={copyRoomLink}
-            className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            {copied ? <Check className="w-4 h-4" /> : <Copy className="w-4 h-4" />}
-            {copied ? 'Copied!' : 'Copy Link'}
-          </button>
-          
-          <button
-            onClick={() => setShowParticipants(!showParticipants)}
-            className="flex items-center gap-2 bg-gray-700 hover:bg-gray-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-colors"
-          >
-            <Users className="w-4 h-4" />
-            Participants
-          </button>
-          
-          <button
-            onClick={() => setShowSettings(!showSettings)}
-            className="bg-gray-700 hover:bg-gray-600 text-white p-2 rounded-lg transition-colors"
-          >
-            <Settings className="w-4 h-4" />
-          </button>
-          
-          <button
-            onClick={handleDisconnect}
-            className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg font-medium transition-colors flex items-center gap-2"
-          >
-            <PhoneOff className="w-4 h-4" />
-            Leave
-          </button>
-        </div>
-      </header>
-
-      {/* Main Content */}
-      <div className="flex-1 relative">
-        <LiveKitRoom
-          token={token}
-          serverUrl={wsUrl}
-          onDisconnected={handleDisconnect}
-          onError={handleConnectionError}
-          video={true}
-          audio={true}
-          className="h-full"
-          options={{
-            // Add connection options for better reliability
-            adaptiveStream: true,
-            dynacast: true,
-            videoCaptureDefaults: {
-              resolution: {
-                width: 640,
-                height: 480,
-                frameRate: 15,
-              },
-            },
-          }}
-        >
-          <RoomContent showSettings={showSettings} participantName={participantName} />
-          <RoomAudioRenderer />
-          
-          <ParticipantsList 
-            isOpen={showParticipants} 
-            onClose={() => setShowParticipants(false)} 
-          />
-        </LiveKitRoom>
-      </div>
     </div>
   );
 };
 
-// Separate component to use LiveKit hooks
-const RoomContent = ({ showSettings, participantName }) => {
-  const room = useRoomContext();
-  const [participants, setParticipants] = useState([]);
-
-  useEffect(() => {
-    if (!room) return;
-
-    const updateParticipants = () => {
-      const remoteParticipants = Array.from(room.remoteParticipants.values());
-      const localParticipant = room.localParticipant;
-      const allParticipants = localParticipant ? [localParticipant, ...remoteParticipants] : remoteParticipants;
-      
-      console.log('Participants updated:', allParticipants.map(p => ({
-        identity: p.identity,
-        name: p.name,
-        metadata: p.metadata
-      })));
-      
-      setParticipants(allParticipants);
-    };
-
-    // Initial update
-    updateParticipants();
-
-    // Listen for participant events
-    room.on('participantConnected', (participant) => {
-      console.log('Participant connected:', participant.identity);
-      updateParticipants();
-      toast.success(`${participant.name || participant.identity} joined the meeting`);
-    });
-
-    room.on('participantDisconnected', (participant) => {
-      console.log('Participant disconnected:', participant.identity);
-      updateParticipants();
-      toast.info(`${participant.name || participant.identity} left the meeting`);
-    });
-
-    room.on('reconnecting', () => {
-      console.log('Room reconnecting...');
-      toast.info('Reconnecting...');
-    });
-
-    room.on('reconnected', () => {
-      console.log('Room reconnected');
-      toast.success('Reconnected successfully');
-      updateParticipants();
-    });
-
-    return () => {
-      room.off('participantConnected', updateParticipants);
-      room.off('participantDisconnected', updateParticipants);
-      room.off('reconnecting');
-      room.off('reconnected');
-    };
-  }, [room]);
-
-  return (
-    <div className="h-full relative">
-      {/* Video Conference */}
-      <VideoConference 
-        style={{ 
-          height: '100%',
-          '--lk-bg': '#111827',
-          '--lk-fg': '#ffffff',
-          '--lk-accent': '#3b82f6'
-        }}
-      />
-
-      {/* Settings Panel */}
-      {showSettings && (
-        <div className="absolute top-4 right-4 bg-gray-800 rounded-lg p-4 shadow-xl border border-gray-700 z-50 min-w-64">
-          <h3 className="text-white font-semibold mb-3">Meeting Info</h3>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center gap-2 text-gray-300">
-              <Users className="w-4 h-4" />
-              <span>{participants.length} participant{participants.length !== 1 ? 's' : ''}</span>
-            </div>
-            <div className="text-gray-400">
-              Room: {room?.name}
-            </div>
-            <div className="text-gray-400">
-              Status: {room?.state}
-            </div>
-            <div className="text-gray-400">
-              Your name: {participantName}
-            </div>
-            {participants.length > 0 && (
-              <div className="mt-3">
-                <h4 className="text-white font-medium mb-2">Participants:</h4>
-                <div className="space-y-1 max-h-32 overflow-y-auto">
-                  {participants.map((participant, index) => (
-                    <div key={participant.identity} className="text-gray-300 text-xs">
-                      {participant === room?.localParticipant ? '(You) ' : ''}
-                      {participant.name || participant.identity}
-                    </div>
-                  ))}
-                </div>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-    </div>
-  );
-};
-
-export default MeetingRoom;
+export default VideoConference;

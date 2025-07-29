@@ -52,11 +52,13 @@ api.interceptors.response.use(
       statusText: error.response?.statusText,
       responseData: error.response?.data,
       headers: error.response?.headers,
+      requestData: error.config?.data,
     });
     
     // Enhanced error type handling
     if (error.code === 'ERR_NETWORK') {
       console.error('🌐 Network Error - Check if backend is running and CORS is configured');
+      console.error('Backend URL:', API_BASE_URL);
     } else if (error.response?.status === 404) {
       console.error('🔍 404 Error - Endpoint not found:', fullUrl);
       console.error('Available endpoints should be:', [
@@ -66,6 +68,10 @@ api.interceptors.response.use(
         `${API_BASE_URL}/room/{room_name}`,
         `${API_BASE_URL}/room/{room_name}/participants`
       ]);
+    } else if (error.response?.status === 422) {
+      console.error('🔧 Validation Error - Check request data format');
+      console.error('Request data:', error.config?.data);
+      console.error('Validation errors:', error.response?.data?.detail);
     } else if (error.response?.status === 0 || error.message.includes('CORS')) {
       console.error('🚫 CORS Error - Backend needs to allow your frontend origin');
     } else if (error.response?.status >= 500) {
@@ -77,14 +83,17 @@ api.interceptors.response.use(
 );
 
 /**
- * Test backend connectivity
+ * Test backend connectivity with detailed debugging
  */
 export const testBackendConnection = async () => {
   try {
     console.log('🧪 Testing backend connection...');
+    console.log('Using API_BASE_URL:', API_BASE_URL);
     
-    // Test the base health endpoint
+    // Test the base health endpoint (remove /api/livekit from URL)
     const baseUrl = API_BASE_URL.replace('/api/livekit', '');
+    console.log('Base URL for health check:', baseUrl);
+    
     const healthResponse = await axios.get(`${baseUrl}/health`, {
       timeout: 10000,
       headers: { 'Accept': 'application/json' }
@@ -100,6 +109,14 @@ export const testBackendConnection = async () => {
     
     console.log('✅ API base route successful:', apiResponse.data);
     
+    // Test the rooms endpoint to verify API prefix is working
+    try {
+      const roomsResponse = await api.get('/rooms');
+      console.log('✅ Rooms endpoint test successful:', roomsResponse.data);
+    } catch (roomsError) {
+      console.warn('⚠️ Rooms endpoint test failed (this might be expected if no rooms exist):', roomsError.response?.status);
+    }
+    
     return {
       health: healthResponse.data,
       api: apiResponse.data,
@@ -110,7 +127,8 @@ export const testBackendConnection = async () => {
     return {
       success: false,
       error: error.message,
-      status: error.response?.status
+      status: error.response?.status,
+      details: error.response?.data
     };
   }
 };
@@ -120,36 +138,59 @@ export const testBackendConnection = async () => {
  */
 export const generateToken = async ({ roomName, participantName, metadata = null }) => {
   try {
-    console.log('🎫 Generating token for:', { roomName, participantName });
+    console.log('🎫 Generating token for:', { roomName, participantName, metadata });
     
     // Validate inputs
     if (!roomName?.trim()) {
-      throw new Error('Room name is required');
+      throw new Error('Room name is required and cannot be empty');
     }
     if (!participantName?.trim()) {
-      throw new Error('Participant name is required');
+      throw new Error('Participant name is required and cannot be empty');
     }
     
-    const response = await api.post('/token', {
-      roomName: roomName.trim(),
-      participantName: participantName.trim(),
-      metadata
+    // Clean the inputs
+    const cleanRoomName = roomName.trim();
+    const cleanParticipantName = participantName.trim();
+    
+    console.log('🎫 Making token request with clean data:', { 
+      roomName: cleanRoomName, 
+      participantName: cleanParticipantName,
+      metadata 
     });
     
+    const requestData = {
+      roomName: cleanRoomName,
+      participantName: cleanParticipantName,
+      ...(metadata && { metadata })
+    };
+    
+    const response = await api.post('/token', requestData);
+    
     console.log('✅ Token generated successfully:', response.data);
+    
+    // Validate response structure
+    if (!response.data.token || !response.data.wsUrl) {
+      throw new Error('Invalid token response: missing token or wsUrl');
+    }
+    
     return response.data;
   } catch (error) {
     console.error('❌ Token generation failed:', error);
     
     // Provide more specific error messages
     if (error.code === 'ERR_NETWORK') {
-      throw new Error('Cannot connect to server. Please check your internet connection and ensure the backend is running.');
+      throw new Error(`Cannot connect to server at ${API_BASE_URL}. Please check your internet connection and ensure the backend is running.`);
     } else if (error.response?.status === 404) {
-      throw new Error(`Token endpoint not found. Expected: ${API_BASE_URL}/token. Please check backend configuration.`);
+      throw new Error(`Token endpoint not found. Tried: ${API_BASE_URL}/token. Please check backend configuration.`);
+    } else if (error.response?.status === 422) {
+      const validationErrors = error.response?.data?.detail;
+      console.error('Validation errors:', validationErrors);
+      throw new Error(`Invalid request data: ${JSON.stringify(validationErrors)}`);
     } else if (error.response?.status === 500) {
-      throw new Error('Server error while generating token. Please check backend logs.');
+      const serverError = error.response?.data?.detail || 'Unknown server error';
+      throw new Error(`Server error while generating token: ${serverError}`);
     } else if (error.message.includes('CORS')) {
-      throw new Error('CORS error. Please contact support.');
+      throw new Error('CORS error. Please contact support or check backend CORS configuration.');
     } else {
       const serverMessage = error.response?.data?.detail || error.response?.data?.message;
       throw new Error(serverMessage || error.message || 'Failed to generate token');
@@ -162,18 +203,24 @@ export const generateToken = async ({ roomName, participantName, metadata = null
  */
 export const createRoom = async ({ roomName, maxParticipants = 50, metadata = null }) => {
   try {
-    console.log('🏠 Creating room:', { roomName, maxParticipants });
+    console.log('🏠 Creating room:', { roomName, maxParticipants, metadata });
     
     // Validate inputs
     if (!roomName?.trim()) {
-      throw new Error('Room name is required');
+      throw new Error('Room name is required and cannot be empty');
     }
     
-    const response = await api.post('/room', {
-      roomName: roomName.trim(),
+    const cleanRoomName = roomName.trim();
+    
+    const requestData = {
+      roomName: cleanRoomName,
       maxParticipants,
-      metadata
-    });
+      ...(metadata && { metadata })
+    };
+    
+    console.log('🏠 Making room creation request:', requestData);
+    
+    const response = await api.post('/room', requestData);
     
     console.log('✅ Room created successfully:', response.data);
     return response.data;
@@ -181,13 +228,17 @@ export const createRoom = async ({ roomName, maxParticipants = 50, metadata = nu
     console.error('❌ Room creation failed:', error);
     
     if (error.code === 'ERR_NETWORK') {
-      throw new Error('Cannot connect to server. Please check your internet connection and ensure the backend is running.');
+      throw new Error(`Cannot connect to server at ${API_BASE_URL}. Please check your internet connection and ensure the backend is running.`);
     } else if (error.response?.status === 404) {
-      throw new Error(`Room endpoint not found. Expected: ${API_BASE_URL}/room. Please check backend configuration.`);
+      throw new Error(`Room creation endpoint not found. Tried: ${API_BASE_URL}/room. Please check backend configuration.`);
     } else if (error.response?.status === 409) {
       throw new Error('Room already exists with this name');
+    } else if (error.response?.status === 422) {
+      const validationErrors = error.response?.data?.detail;
+      throw new Error(`Invalid room data: ${JSON.stringify(validationErrors)}`);
     } else if (error.response?.status === 500) {
-      throw new Error('Server error while creating room. Please check backend logs.');
+      const serverError = error.response?.data?.detail || 'Unknown server error';
+      throw new Error(`Server error while creating room: ${serverError}`);
     } else {
       const serverMessage = error.response?.data?.detail || error.response?.data?.message;
       throw new Error(serverMessage || error.message || 'Failed to create room');
@@ -223,8 +274,12 @@ export const getRooms = async () => {
  */
 export const getRoomInfo = async (roomName) => {
   try {
+    if (!roomName?.trim()) {
+      throw new Error('Room name is required');
+    }
+    
     console.log('ℹ️ Getting room info for:', roomName);
-    const response = await api.get(`/room/${encodeURIComponent(roomName)}`);
+    const response = await api.get(`/room/${encodeURIComponent(roomName.trim())}`);
     console.log('✅ Room info retrieved:', response.data);
     return response.data;
   } catch (error) {
@@ -239,8 +294,12 @@ export const getRoomInfo = async (roomName) => {
  */
 export const deleteRoom = async (roomName) => {
   try {
+    if (!roomName?.trim()) {
+      throw new Error('Room name is required');
+    }
+    
     console.log('🗑️ Deleting room:', roomName);
-    const response = await api.delete(`/room/${encodeURIComponent(roomName)}`);
+    const response = await api.delete(`/room/${encodeURIComponent(roomName.trim())}`);
     console.log('✅ Room deleted:', response.data);
     return response.data;
   } catch (error) {
@@ -255,8 +314,12 @@ export const deleteRoom = async (roomName) => {
  */
 export const getRoomParticipants = async (roomName) => {
   try {
+    if (!roomName?.trim()) {
+      throw new Error('Room name is required');
+    }
+    
     console.log('👥 Getting participants for room:', roomName);
-    const response = await api.get(`/room/${encodeURIComponent(roomName)}/participants`);
+    const response = await api.get(`/room/${encodeURIComponent(roomName.trim())}/participants`);
     console.log('✅ Participants retrieved:', response.data);
     return response.data;
   } catch (error) {
@@ -271,7 +334,11 @@ export const getRoomParticipants = async (roomName) => {
  */
 export const muteParticipant = async (roomName, participantIdentity) => {
   try {
-    const response = await api.post(`/room/${encodeURIComponent(roomName)}/mute/${encodeURIComponent(participantIdentity)}`);
+    if (!roomName?.trim() || !participantIdentity?.trim()) {
+      throw new Error('Room name and participant identity are required');
+    }
+    
+    const response = await api.post(`/room/${encodeURIComponent(roomName.trim())}/mute/${encodeURIComponent(participantIdentity.trim())}`);
     return response.data;
   } catch (error) {
     console.error('❌ Mute participant failed:', error);
@@ -285,7 +352,11 @@ export const muteParticipant = async (roomName, participantIdentity) => {
  */
 export const unmuteParticipant = async (roomName, participantIdentity) => {
   try {
-    const response = await api.post(`/room/${encodeURIComponent(roomName)}/unmute/${encodeURIComponent(participantIdentity)}`);
+    if (!roomName?.trim() || !participantIdentity?.trim()) {
+      throw new Error('Room name and participant identity are required');
+    }
+    
+    const response = await api.post(`/room/${encodeURIComponent(roomName.trim())}/unmute/${encodeURIComponent(participantIdentity.trim())}`);
     return response.data;
   } catch (error) {
     console.error('❌ Unmute participant failed:', error);
@@ -299,7 +370,11 @@ export const unmuteParticipant = async (roomName, participantIdentity) => {
  */
 export const kickParticipant = async (roomName, participantIdentity) => {
   try {
-    const response = await api.post(`/room/${encodeURIComponent(roomName)}/kick/${encodeURIComponent(participantIdentity)}`);
+    if (!roomName?.trim() || !participantIdentity?.trim()) {
+      throw new Error('Room name and participant identity are required');
+    }
+    
+    const response = await api.post(`/room/${encodeURIComponent(roomName.trim())}/kick/${encodeURIComponent(participantIdentity.trim())}`);
     return response.data;
   } catch (error) {
     console.error('❌ Kick participant failed:', error);
@@ -308,4 +383,55 @@ export const kickParticipant = async (roomName, participantIdentity) => {
   }
 };
 
+/**
+ * Check backend health
+ */
+export const checkHealth = async () => {
+  try {
+    // Remove /api/livekit from the base URL for health check
+    const baseUrl = API_BASE_URL.replace('/api/livekit', '');
+    console.log('Health check URL:', `${baseUrl}/health`);
+    
+    const response = await axios.get(`${baseUrl}/health`, {
+      timeout: 10000,
+      headers: {
+        'Accept': 'application/json',
+      }
+    });
+    
+    console.log('Health check successful:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('Health check failed:', error);
+    
+    if (error.code === 'ERR_NETWORK') {
+      throw new Error('Backend server is not accessible. Please try again later.');
+    } else {
+      throw new Error(`Backend health check failed: ${error.message}`);
+    }
+  }
+};
+
+/**
+ * Test function to verify backend connectivity
+ */
+export const testConnection = async () => {
+  try {
+    console.log('Testing backend connection...');
+    const connectionTest = await testBackendConnection();
+    
+    if (connectionTest.success) {
+      console.log('✅ Backend connection test passed');
+      return true;
+    } else {
+      console.error('❌ Backend connection test failed:', connectionTest);
+      return false;
+    }
+  } catch (error) {
+    console.error('❌ Backend connection test failed:', error);
+    return false;
+  }
+};
+
+// Export the configured axios instance for custom requests if needed
 export default api;
