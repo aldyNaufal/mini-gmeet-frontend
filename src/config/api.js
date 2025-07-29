@@ -2,7 +2,7 @@ import axios from 'axios';
 
 // Configure the base URL for your backend API
 // This will automatically use the production URL when deployed
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 
+const API_BASE_URL = import.meta.env.VITE_API_URL || 
   (import.meta.env.PROD 
     ? 'https://mini-gmeet-backend-production.up.railway.app/api/livekit'  // Replace with your actual Railway URL
     : 'http://localhost:8000/api/livekit'
