@@ -9,4 +9,10 @@ export default defineConfig({
     host: true, // or use '0.0.0.0'
     port: 5173,
   },
+  optimizeDeps: {
+    include: ['livekit-client', '@livekit/components-react']
+  },
+  define: {
+    global: 'globalThis',
+  }
 })

@@ -1,10 +1,11 @@
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import Room from './pages/MeetingRoom';
+import MeetingRoom from './pages/MeetingRoom';
 import Assignment from './pages/Assignment';
 import Home from './pages/home/Home'
 import Layout from './components/Layout';
 import InterviewResult from './pages/InterviewResult';
 import VideoInterview from './pages/VideoInterview';
+import Room from './pages/CreateRoom';
 
 function App() {
   return (
@@ -19,6 +20,7 @@ function App() {
         
         {/* <Route path="admin-room" element={<AdminRoom />} /> */}
         <Route path="/room" element={<Room />} />
+        <Route path="/room/:roomName" element={<MeetingRoom />} />
       </Routes>
     </BrowserRouter>
   );
