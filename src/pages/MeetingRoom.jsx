@@ -1,4 +1,3 @@
-// src/components/VideoConferenceApp.jsx
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { 
   Camera, 
@@ -50,6 +49,13 @@ const VideoConferenceApp = () => {
   const handleParticipantConnected = useCallback((participant) => {
     console.log('Participant connected:', participant.identity);
     setParticipants(prev => new Map(prev.set(participant.identity, participant)));
+    
+    // Subscribe to existing published tracks when participant connects
+    participant.trackPublications.forEach((publication) => {
+      if (publication.isSubscribed && publication.track) {
+        handleTrackSubscribed(publication.track, publication, participant);
+      }
+    });
   }, []);
 
   // Handle participant disconnected
@@ -62,7 +68,7 @@ const VideoConferenceApp = () => {
     });
   }, []);
 
-  // Handle track subscribed
+  // Handle track subscribed - Updated with better error handling
   const handleTrackSubscribed = useCallback((track, publication, participant) => {
     console.log('Track subscribed:', track.kind, participant.identity);
     
@@ -70,14 +76,25 @@ const VideoConferenceApp = () => {
       const element = track.attach();
       
       if (track.kind === Track.Kind.Video) {
-        const videoRef = remoteVideoRefs.current.get(participant.identity);
-        if (videoRef) {
-          // Replace existing video element
-          if (videoRef.firstChild) {
-            videoRef.removeChild(videoRef.firstChild);
+        // Wait a bit for the video ref to be available
+        setTimeout(() => {
+          const videoRef = remoteVideoRefs.current.get(participant.identity);
+          if (videoRef && element) {
+            // Clear existing video element
+            while (videoRef.firstChild) {
+              videoRef.removeChild(videoRef.firstChild);
+            }
+            videoRef.appendChild(element);
+            console.log('Video element attached for participant:', participant.identity);
+          } else {
+            console.warn('Video ref not found for participant:', participant.identity);
           }
-          videoRef.appendChild(element);
-        }
+        }, 100);
+      }
+      
+      if (track.kind === Track.Kind.Audio) {
+        // Audio tracks are automatically played
+        element.play().catch(e => console.warn('Audio play failed:', e));
       }
     }
   }, []);
@@ -160,6 +177,13 @@ const VideoConferenceApp = () => {
         const existingParticipants = new Map();
         roomInstance.remoteParticipants.forEach((participant, identity) => {
           existingParticipants.set(identity, participant);
+          
+          // Subscribe to existing tracks for participants already in the room
+          participant.trackPublications.forEach((publication) => {
+            if (publication.isSubscribed && publication.track) {
+              handleTrackSubscribed(publication.track, publication, participant);
+            }
+          });
         });
         setParticipants(existingParticipants);
       });
@@ -285,7 +309,7 @@ const VideoConferenceApp = () => {
     };
   }, []);
 
-  // Render participant video
+  // Render participant video - Updated with better track handling
   const renderParticipantVideo = (participant, isLocal = false) => {
     const identity = isLocal ? 'local' : participant.identity;
     const name = isLocal ? participantName : (participant.name || participant.identity);
@@ -296,6 +320,17 @@ const VideoConferenceApp = () => {
           ref={isLocal ? localVideoRef : (el) => {
             if (el && !isLocal) {
               remoteVideoRefs.current.set(participant.identity, el);
+              
+              // If participant already has video track, attach it immediately
+              const videoPublication = participant.getTrackPublication(Track.Source.Camera);
+              if (videoPublication && videoPublication.isSubscribed && videoPublication.track) {
+                const element = videoPublication.track.attach();
+                if (el.firstChild) {
+                  el.removeChild(el.firstChild);
+                }
+                el.appendChild(element);
+                console.log('Immediately attached video for:', participant.identity);
+              }
             }
           }}
           className="w-full h-full bg-gray-700 flex items-center justify-center"
@@ -319,6 +354,21 @@ const VideoConferenceApp = () => {
         {isLocal && !isAudioEnabled && (
           <div className="absolute top-4 right-4 bg-red-500 p-2 rounded-lg">
             <MicOff className="w-4 h-4 text-white" />
+          </div>
+        )}
+        
+        {/* Video status indicator for remote participants */}
+        {!isLocal && (
+          <div className="absolute top-4 right-4">
+            {participant.getTrackPublication(Track.Source.Camera)?.isSubscribed ? (
+              <div className="bg-green-500 p-1 rounded">
+                <Camera className="w-3 h-3 text-white" />
+              </div>
+            ) : (
+              <div className="bg-gray-500 p-1 rounded">
+                <CameraOff className="w-3 h-3 text-white" />
+              </div>
+            )}
           </div>
         )}
         
