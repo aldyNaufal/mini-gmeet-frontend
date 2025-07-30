@@ -236,10 +236,19 @@ const VideoConferenceApp = () => {
 
   // Copy room link with better format
   const copyRoomLink = () => {
-    const roomLink = `${window.location.origin}/?room=${encodeURIComponent(roomName)}&name=`;
-    navigator.clipboard.writeText(roomLink);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    // Create a cleaner URL format
+    const baseUrl = window.location.origin;
+    const roomParam = encodeURIComponent(roomName);
+    const roomLink = `${baseUrl}/?room=${roomParam}`;
+    
+    navigator.clipboard.writeText(roomLink).then(() => {
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    }).catch(err => {
+      console.error('Failed to copy link:', err);
+      // Fallback: show the link in an alert
+      alert(`Share this link: ${roomLink}`);
+    });
   };
 
   // Handle URL params and auto-join
@@ -266,6 +275,28 @@ const VideoConferenceApp = () => {
         roomRef.current.disconnect();
       }
     };
+  }, []);
+
+    // Add this to your useEffect in VideoConferenceApp.jsx
+  useEffect(() => {
+    console.log('Current URL:', window.location.href);
+    console.log('Search params:', window.location.search);
+    
+    const urlParams = new URLSearchParams(window.location.search);
+    const roomFromUrl = urlParams.get('room');
+    const nameFromUrl = urlParams.get('name');
+    
+    console.log('Room from URL:', roomFromUrl);
+    console.log('Name from URL:', nameFromUrl);
+    
+    if (roomFromUrl) {
+      setRoomName(decodeURIComponent(roomFromUrl));
+      console.log('Set room name to:', decodeURIComponent(roomFromUrl));
+    }
+    
+    if (nameFromUrl) {
+      setParticipantName(decodeURIComponent(nameFromUrl));
+    }
   }, []);
 
   // Render participant video
