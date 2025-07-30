@@ -25,7 +25,7 @@ import {
 } from 'livekit-client';
 
 // Configuration - Using environment variable
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://mini-gmeet-backend-production.up.railway.app/api';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://your-railway-app.railway.app/api';
 
 const VideoConferenceApp = () => {
   // State management
@@ -234,20 +234,28 @@ const VideoConferenceApp = () => {
     }
   };
 
-  // Copy room link
+  // Copy room link with better format
   const copyRoomLink = () => {
-    const roomLink = `${window.location.origin}?room=${encodeURIComponent(roomName)}`;
+    const roomLink = `${window.location.origin}/?room=${encodeURIComponent(roomName)}&name=`;
     navigator.clipboard.writeText(roomLink);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   };
 
-  // Handle URL params
+  // Handle URL params and auto-join
   useEffect(() => {
     const urlParams = new URLSearchParams(window.location.search);
     const roomFromUrl = urlParams.get('room');
+    const nameFromUrl = urlParams.get('name');
+    
     if (roomFromUrl) {
       setRoomName(decodeURIComponent(roomFromUrl));
+      console.log('Room from URL:', decodeURIComponent(roomFromUrl));
+    }
+    
+    if (nameFromUrl) {
+      setParticipantName(decodeURIComponent(nameFromUrl));
+      console.log('Name from URL:', decodeURIComponent(nameFromUrl));
     }
   }, []);
 
@@ -338,6 +346,11 @@ const VideoConferenceApp = () => {
                 className="w-full bg-white/10 border border-white/20 rounded-lg px-4 py-3 text-white placeholder-blue-300 focus:outline-none focus:ring-2 focus:ring-blue-400 focus:border-transparent transition-all"
                 disabled={isConnecting}
               />
+              {roomName && (
+                <p className="text-blue-300 text-xs mt-1">
+                  Room link: {window.location.origin}/?room={encodeURIComponent(roomName)}
+                </p>
+              )}
             </div>
 
             <div>
