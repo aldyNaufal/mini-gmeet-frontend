@@ -234,12 +234,13 @@ const VideoConferenceApp = () => {
     }
   };
 
-  // Copy room link with better format
+  // Copy room link with updated format for /room route
   const copyRoomLink = () => {
-    // Create a cleaner URL format
-    const baseUrl = window.location.origin;
-    const roomParam = encodeURIComponent(roomName);
-    const roomLink = `${baseUrl}/?room=${roomParam}`;
+    // Updated to use /room path with query parameters
+    const baseUrl = window.location.protocol + '//' + window.location.host;
+    const roomLink = `${baseUrl}/room?room=${encodeURIComponent(roomName)}&name=${encodeURIComponent(participantName)}`;
+    
+    console.log('Copying room link:', roomLink); // Debug log
     
     navigator.clipboard.writeText(roomLink).then(() => {
       setCopied(true);
@@ -251,20 +252,27 @@ const VideoConferenceApp = () => {
     });
   };
 
-  // Handle URL params and auto-join
+  // Handle URL params and auto-join - UPDATED for /room route
   useEffect(() => {
+    console.log('Current URL:', window.location.href);
+    console.log('Search params:', window.location.search);
+    console.log('Pathname:', window.location.pathname);
+    
     const urlParams = new URLSearchParams(window.location.search);
     const roomFromUrl = urlParams.get('room');
     const nameFromUrl = urlParams.get('name');
     
-    if (roomFromUrl) {
+    console.log('Room from URL:', roomFromUrl);
+    console.log('Name from URL:', nameFromUrl);
+    
+    if (roomFromUrl && roomFromUrl.trim()) {
       setRoomName(decodeURIComponent(roomFromUrl));
-      console.log('Room from URL:', decodeURIComponent(roomFromUrl));
+      console.log('Set room name to:', decodeURIComponent(roomFromUrl));
     }
     
-    if (nameFromUrl) {
+    if (nameFromUrl && nameFromUrl.trim()) {
       setParticipantName(decodeURIComponent(nameFromUrl));
-      console.log('Name from URL:', decodeURIComponent(nameFromUrl));
+      console.log('Set participant name to:', decodeURIComponent(nameFromUrl));
     }
   }, []);
 
@@ -275,28 +283,6 @@ const VideoConferenceApp = () => {
         roomRef.current.disconnect();
       }
     };
-  }, []);
-
-    // Add this to your useEffect in VideoConferenceApp.jsx
-  useEffect(() => {
-    console.log('Current URL:', window.location.href);
-    console.log('Search params:', window.location.search);
-    
-    const urlParams = new URLSearchParams(window.location.search);
-    const roomFromUrl = urlParams.get('room');
-    const nameFromUrl = urlParams.get('name');
-    
-    console.log('Room from URL:', roomFromUrl);
-    console.log('Name from URL:', nameFromUrl);
-    
-    if (roomFromUrl) {
-      setRoomName(decodeURIComponent(roomFromUrl));
-      console.log('Set room name to:', decodeURIComponent(roomFromUrl));
-    }
-    
-    if (nameFromUrl) {
-      setParticipantName(decodeURIComponent(nameFromUrl));
-    }
   }, []);
 
   // Render participant video
@@ -379,7 +365,7 @@ const VideoConferenceApp = () => {
               />
               {roomName && (
                 <p className="text-blue-300 text-xs mt-1">
-                  Room link: {window.location.origin}/?room={encodeURIComponent(roomName)}
+                  Room link: {window.location.origin}/room?room={encodeURIComponent(roomName)}
                 </p>
               )}
             </div>
@@ -462,7 +448,6 @@ const VideoConferenceApp = () => {
                 </>
               )}
             </button>
-
             <button
               onClick={leaveRoom}
               className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-lg transition-colors flex items-center gap-2"
