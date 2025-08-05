@@ -1,107 +1,147 @@
-// src/services/api.js
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000';
+import { Room, RoomEvent, Track } from 'livekit-client';
+import { ROOM_CONFIG, VIDEO_ATTACH_DELAY } from '../utils/constants.js';
 
-class LiveKitAPI {
+export class LiveKitService {
   constructor() {
-    this.baseURL = API_BASE_URL;
+    this.room = null;
+    this.callbacks = {};
   }
 
-  async request(endpoint, options = {}) {
-    const url = `${this.baseURL}${endpoint}`;
-    const config = {
-      headers: {
-        'Content-Type': 'application/json',
-        ...options.headers,
-      },
-      ...options,
-    };
+  // Set up event callbacks
+  setCallbacks(callbacks) {
+    this.callbacks = { ...this.callbacks, ...callbacks };
+  }
 
-    if (config.body && typeof config.body === 'object') {
-      config.body = JSON.stringify(config.body);
+  // Create and configure room
+  createRoom() {
+    const room = new Room(ROOM_CONFIG);
+    
+    // Set up event listeners
+    room.on(RoomEvent.ParticipantConnected, this.handleParticipantConnected.bind(this));
+    room.on(RoomEvent.ParticipantDisconnected, this.handleParticipantDisconnected.bind(this));
+    room.on(RoomEvent.TrackSubscribed, this.handleTrackSubscribed.bind(this));
+    room.on(RoomEvent.TrackUnsubscribed, this.handleTrackUnsubscribed.bind(this));
+    room.on(RoomEvent.LocalTrackPublished, this.handleLocalTrackPublished.bind(this));
+    room.on(RoomEvent.Connected, this.handleConnected.bind(this));
+    room.on(RoomEvent.Disconnected, this.handleDisconnected.bind(this));
+
+    this.room = room;
+    return room;
+  }
+
+  // Connect to room
+  async connect(wsUrl, token) {
+    if (!this.room) {
+      throw new Error('Room not created. Call createRoom() first.');
     }
 
-    try {
-      const response = await fetch(url, config);
-      const data = await response.json();
+    await this.room.connect(wsUrl, token);
+    await this.room.localParticipant.enableCameraAndMicrophone();
+  }
 
-      if (!response.ok) {
-        throw new Error(data.detail || `HTTP error! status: ${response.status}`);
+  // Disconnect from room
+  async disconnect() {
+    if (this.room) {
+      await this.room.disconnect();
+      this.room = null;
+    }
+  }
+
+  // Event handlers
+  handleParticipantConnected(participant) {
+    console.log('Participant connected:', participant.identity);
+    
+    if (this.callbacks.onParticipantConnected) {
+      this.callbacks.onParticipantConnected(participant);
+    }
+    
+    // Subscribe to existing published tracks when participant connects
+    participant.trackPublications.forEach((publication) => {
+      if (publication.isSubscribed && publication.track) {
+        this.handleTrackSubscribed(publication.track, publication, participant);
       }
+    });
+  }
 
-      return data;
-    } catch (error) {
-      console.error('API request failed:', error);
-      throw error;
+  handleParticipantDisconnected(participant) {
+    console.log('Participant disconnected:', participant.identity);
+    
+    if (this.callbacks.onParticipantDisconnected) {
+      this.callbacks.onParticipantDisconnected(participant);
     }
   }
 
-  // Token Management
-  async generateToken(roomName, participantName, metadata = null, maxParticipants = 100) {
-    return this.request('/api/livekit/token', {
-      method: 'POST',
-      body: {
-        roomName,
-        participantName,
-        metadata,
-        maxParticipants,
-      },
-    });
+  handleTrackSubscribed(track, publication, participant) {
+    console.log('Track subscribed:', track.kind, participant.identity);
+    
+    if (track.kind === Track.Kind.Video || track.kind === Track.Kind.Audio) {
+      const element = track.attach();
+      
+      if (track.kind === Track.Kind.Video) {
+        // Delay to ensure video ref is available
+        setTimeout(() => {
+          if (this.callbacks.onVideoTrackSubscribed) {
+            this.callbacks.onVideoTrackSubscribed(element, participant);
+          }
+        }, VIDEO_ATTACH_DELAY);
+      }
+      
+      if (track.kind === Track.Kind.Audio) {
+        element.play().catch(e => console.warn('Audio play failed:', e));
+      }
+    }
   }
 
-  // Room Management
-  async createRoom(roomName, maxParticipants = 50, metadata = null) {
-    return this.request('/api/livekit/room', {
-      method: 'POST',
-      body: {
-        roomName,
-        maxParticipants,
-        metadata,
-      },
-    });
+  handleTrackUnsubscribed(track, publication, participant) {
+    console.log('Track unsubscribed:', track.kind, participant.identity);
+    track.detach();
   }
 
-  async listRooms() {
-    return this.request('/api/livekit/rooms');
+  handleLocalTrackPublished(publication, participant) {
+    console.log('Local track published:', publication.kind);
+    
+    if (this.callbacks.onLocalTrackPublished) {
+      this.callbacks.onLocalTrackPublished(publication, participant);
+    }
   }
 
-  async getRoomInfo(roomName) {
-    return this.request(`/api/livekit/room/${encodeURIComponent(roomName)}`);
+  handleConnected() {
+    console.log('Connected to room');
+    
+    if (this.callbacks.onConnected) {
+      this.callbacks.onConnected(this.room);
+    }
   }
 
-  async deleteRoom(roomName) {
-    return this.request(`/api/livekit/room/${encodeURIComponent(roomName)}`, {
-      method: 'DELETE',
-    });
+  handleDisconnected() {
+    console.log('Disconnected from room');
+    
+    if (this.callbacks.onDisconnected) {
+      this.callbacks.onDisconnected();
+    }
   }
 
-  // Participant Management
-  async getRoomParticipants(roomName) {
-    return this.request(`/api/livekit/room/${encodeURIComponent(roomName)}/participants`);
+  // Media controls
+  async toggleMicrophone(enabled) {
+    if (this.room?.localParticipant) {
+      await this.room.localParticipant.setMicrophoneEnabled(enabled);
+    }
   }
 
-  async muteParticipant(roomName, participantIdentity) {
-    return this.request(`/api/livekit/room/${encodeURIComponent(roomName)}/mute/${encodeURIComponent(participantIdentity)}`, {
-      method: 'POST',
-    });
+  async toggleCamera(enabled) {
+    if (this.room?.localParticipant) {
+      await this.room.localParticipant.setCameraEnabled(enabled);
+    }
   }
 
-  async unmuteParticipant(roomName, participantIdentity) {
-    return this.request(`/api/livekit/room/${encodeURIComponent(roomName)}/unmute/${encodeURIComponent(participantIdentity)}`, {
-      method: 'POST',
-    });
+  async toggleScreenShare(enabled) {
+    if (this.room?.localParticipant) {
+      await this.room.localParticipant.setScreenShareEnabled(enabled);
+    }
   }
 
-  async kickParticipant(roomName, participantIdentity) {
-    return this.request(`/api/livekit/room/${encodeURIComponent(roomName)}/kick/${encodeURIComponent(participantIdentity)}`, {
-      method: 'POST',
-    });
-  }
-
-  // Health Check
-  async healthCheck() {
-    return this.request('/health');
+  // Get current room instance
+  getRoom() {
+    return this.room;
   }
 }
-
-export const liveKitAPI = new LiveKitAPI();
-export default liveKitAPI;

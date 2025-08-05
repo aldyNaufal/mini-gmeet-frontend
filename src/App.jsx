@@ -2,7 +2,7 @@ import { BrowserRouter, Routes, Route } from 'react-router-dom';
 import MeetingRoom from './pages/MeetingRoom';
 import Assignment from './pages/Assignment';
 import Home from './pages/home/Home'
-import Layout from './components/Layout';
+import Layout from './components/layout/Layout';
 import InterviewResult from './pages/InterviewResult';
 import VideoInterview from './pages/VideoInterview';
 
