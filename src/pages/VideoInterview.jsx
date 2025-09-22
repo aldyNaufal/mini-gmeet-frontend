@@ -1,5 +1,10 @@
-// pages/VideoInterview.jsx
+import React from 'react';
+import { useNavigate } from 'react-router-dom';
+
+
 export default function VideoInterview() {
+  const navigate = useNavigate();
+
   return (
     <div className="h-full w-full p-8 left-10" style={{ backgroundColor: '#FFFDF6' }}>
       <div className="max-w-4xl mx-auto">
@@ -16,7 +21,9 @@ export default function VideoInterview() {
                     <p className="text-sm text-gray-600">5 questions • 30 minutes</p>
                     <p className="text-sm text-purple-600">Status: Ready to start</p>
                   </div>
-                  <button className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+                  <button 
+                    onClick={() => navigate('/instructions')}
+                    className="px-4 py-2 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
                     Start Recording
                   </button>
                 </div>
