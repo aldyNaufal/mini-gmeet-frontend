@@ -50,7 +50,7 @@ const QuestionDisplay = ({
     };
 
     return (
-        <div className="w-full">
+        <div className="h-full w-full">
             <div className="text-center mb-6">
                 <h2 className="text-2xl font-bold text-gray-800 mb-1">
                     Pertanyaan {questionNumber} dari {totalQuestions}

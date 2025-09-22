@@ -1,8 +1,6 @@
 import React, { useState } from "react";
 import { Camera, ArrowRight } from 'lucide-react';
-import { use } from 'react';
 import InterviewFlowPage from "./InterviewFlowPage";
-
 
 const InstructionsPage = () => {
   const [startInterview, setStartInterview] = useState(false);
@@ -12,44 +10,52 @@ const InstructionsPage = () => {
   }
 
   return (
-    <div className="min-h-screen bg-white flex items-center justify-center p-4">
-      <div className="max-w-2xl w-full bg-white rounded-2xl shadow-xl p-8">
-        <div className="text-center mb-8">
-          <div className="w-16 h-16 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-4">
-            <Camera className="w-8 h-8 text-white" />
+    <div className="h-screen w-full bg-gray-50 flex items-center justify-center overflow-y-auto">
+      <div className=" w-full h-full bg-white rounded-xl shadow-lg p-6 my-4">
+        <div className="text-center mb-6">
+          <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
+            <Camera className="w-6 h-6 text-white" />
           </div>
-          <h1 className="text-3xl font-bold text-gray-800 mb-2">Interview Instructions</h1>
-          <p className="text-gray-600">Please read carefully before proceeding</p>
+          <h1 className="text-2xl font-bold text-gray-800 mb-2">Interview Instructions</h1>
+          <p className="text-gray-600 text-sm">Please read carefully before proceeding</p>
         </div>
 
-        <div className="space-y-6 mb-8">
+        <div className="grid md:grid-cols-3 gap-4 mb-6">
           <div className="bg-blue-50 rounded-lg p-4">
-            <h3 className="font-semibold text-blue-800 mb-2">📋 Before You Start</h3>
-            <ul className="text-blue-700 space-y-1 text-sm">
-              <li>• Ensure you have a stable internet connection</li>
-              <li>• Find a quiet, well-lit environment</li>
-              <li>• Test your camera and microphone</li>
-              <li>• Have a glass of water nearby</li>
+            <h3 className="font-semibold text-blue-800 mb-3 flex items-center">
+              <span className="text-lg mr-2">📋</span>
+              Before You Start
+            </h3>
+            <ul className="text-blue-700 space-y-2 text-sm">
+              <li>• Stable internet connection</li>
+              <li>• Quiet, well-lit environment</li>
+              <li>• Test camera and microphone</li>
             </ul>
           </div>
 
           <div className="bg-green-50 rounded-lg p-4">
-            <h3 className="font-semibold text-green-800 mb-2">🎯 Interview Process</h3>
-            <ul className="text-green-700 space-y-1 text-sm">
-              <li>• You will watch a video with interview questions</li>
-              <li>• Take notes if needed during the video</li>
-              <li>• After the video, you'll record your responses</li>
-              <li>• Speak clearly and maintain eye contact with the camera</li>
+            <h3 className="font-semibold text-green-800 mb-3 flex items-center">
+              <span className="text-lg mr-2">🎯</span>
+              Interview Process
+            </h3>
+            <ul className="text-green-700 space-y-2 text-sm">
+              <li>• Watch video with questions</li>
+              <li>• Take notes if needed</li>
+              <li>• Record your responses</li>
+              <li>• Maintain eye contact</li>
             </ul>
           </div>
 
           <div className="bg-amber-50 rounded-lg p-4">
-            <h3 className="font-semibold text-amber-800 mb-2">⚠️ Important Notes</h3>
-            <ul className="text-amber-700 space-y-1 text-sm">
-              <li>• You cannot pause or rewind the question video</li>
-              <li>• Recording time is limited to 3 minutes per response</li>
-              <li>• Make sure to grant camera and microphone permissions</li>
-              <li>• Stay professional and be yourself</li>
+            <h3 className="font-semibold text-amber-800 mb-3 flex items-center">
+              <span className="text-lg mr-2">⚠️</span>
+              Important Notes
+            </h3>
+            <ul className="text-amber-700 space-y-2 text-sm">
+              <li>• Cannot pause/rewind video</li>
+              <li>• 3 minutes per response</li>
+              <li>• Grant camera permissions</li>
+              <li>• Stay professional</li>
             </ul>
           </div>
         </div>
