@@ -50,15 +50,8 @@ const QuestionDisplay = ({
     };
 
     return (
-        <div className="h-full w-full">
-            <div className="text-center mb-6">
-                <h2 className="text-2xl font-bold text-gray-800 mb-1">
-                    Pertanyaan {questionNumber} dari {totalQuestions}
-                </h2>
-                <p className="text-gray-600 text-sm">Tonton video dan bersiaplah untuk merekam jawaban Anda</p>
-            </div>
-
-            <div className="rounded-xl overflow-hidden shadow-md bg-black relative mb-4">
+        <div className="h-full w-full p-4">
+            <div className="rounded-xl overflow-hidden shadow-md bg-black relative mb-4 max-w-2xl mx-auto">
                 <video
                     ref={videoRef}
                     src={videoUrl}
@@ -103,20 +96,22 @@ const QuestionDisplay = ({
                     <span>{formatTime(duration)}</span>
                 </div>
             </div>
-
-            <div className="bg-yellow-50 border border-yellow-300 rounded-lg p-4 mb-6">
-                <h3 className="text-yellow-800 font-semibold mb-2">📝 Question Prompt</h3>
-                <p className="text-yellow-700">{prompt}</p>
-            </div>
-
-            <div className="text-center">
-                <button
-                    onClick={onStartRecording}
-                    className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg shadow-md flex items-center justify-center mx-auto transition-transform transform hover:scale-105"
-                >
-                    Start Recording
-                    <ArrowRight className="ml-2 w-5 h-5" />
-                </button>
+            <div className="flex-1 flex flex-row justify-between max-w-2xl mx-auto">
+                <div className="text-center mb-6">
+                    <h2 className="text-2xl text-left font-bold text-gray-800 mb-1">
+                        Pertanyaan {questionNumber} dari {totalQuestions}
+                    </h2>
+                    <p className="text-gray-600 text-left text-sm">Tonton video dan bersiaplah untuk merekam jawaban Anda</p>
+                </div>
+                <div className="flex items-center text-center">
+                    <button
+                        onClick={onStartRecording}
+                        className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-8 rounded-lg shadow-md flex items-center justify-center mx-auto transition-transform transform hover:scale-105"
+                    >
+                        Start Recording
+                        <ArrowRight className="ml-2 w-5 h-5" />
+                    </button>
+                </div>
             </div>
         </div>
     );

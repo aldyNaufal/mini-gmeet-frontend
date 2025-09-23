@@ -11,7 +11,7 @@ const InstructionsPage = () => {
 
   return (
     <div className="h-screen w-full bg-gray-50 flex items-center justify-center overflow-y-auto">
-      <div className=" w-full h-full bg-white rounded-xl shadow-lg p-8 my-4 mt-10">
+      <div className=" w-full h-screen bg-white rounded-xl shadow-lg p-8 ">
         <div className="text-center mb-6 ">
           <div className="w-12 h-12 bg-blue-500 rounded-full flex items-center justify-center mx-auto mb-3">
             <Camera className="w-6 h-6 text-white" />

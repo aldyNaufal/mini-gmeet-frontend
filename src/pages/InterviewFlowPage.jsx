@@ -67,8 +67,8 @@ const InterviewFlowPage = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 p-6">
-            <div className="max-w-3xl mx-auto bg-white rounded-xl shadow-lg p-6">
+        <div className="min-h-screen bg-gray-50 ">
+            <div className="mx-auto min-h-screen bg-white rounded-xl shadow-lg ">
                 {isUploading && (
                     <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
                         <div className="bg-white rounded-lg p-6 text-center">

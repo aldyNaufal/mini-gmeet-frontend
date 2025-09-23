@@ -223,15 +223,10 @@ const RecordingSection = ({ onCompleteRecording, question }) => {
   }
 
   return (
-    <div className="bg-white p-8">
-      <div className="text-center mb-8">
-        <h1 className="text-3xl font-bold text-gray-800 mb-2">Record Your Response</h1>
-        <p className="text-gray-600">Maximum recording time: 3 minutes</p>
-      </div>
-
+    <div className="bg-white h-screen p-4 ">
       {/* Live Video Preview (shown during recording or when no recording exists) */}
       {!recordingComplete && (
-        <div className="bg-black rounded-lg overflow-hidden mb-6 relative">
+        <div className="bg-black rounded-lg overflow-hidden mb-6 relative max-w-3xl mx-auto">
           <div className="aspect-video relative">
             <video
               ref={videoRef}
@@ -314,81 +309,89 @@ const RecordingSection = ({ onCompleteRecording, question }) => {
           </div>
         </div>
       )}
+      <div className="flex flex-col md:flex-row gap-8 items-start md:items-center max-w-6xl mx-auto">
+  {/* Video Section (Kiri) */}
+  {recordingComplete && (
+    <div className="bg-black rounded-lg overflow-hidden relative max-w-xl">
+      <div className="aspect-video">
+        <video
+          ref={playbackVideoRef}
+          controls={true}
+          className="w-full h-full object-cover"
+          onPlay={() => setIsPlayingRecording(true)}
+          onPause={() => setIsPlayingRecording(false)}
+          onEnded={() => setIsPlayingRecording(false)}
+        />
 
-      {/* Recorded Video Playback */}
-      {recordingComplete && (
-        <div className="bg-black rounded-lg overflow-hidden mb-6 relative">
-          <div className="aspect-video">
-            <video
-              ref={playbackVideoRef}
-              controls={true}
-              className="w-full h-full object-cover"
-              onPlay={() => setIsPlayingRecording(true)}
-              onPause={() => setIsPlayingRecording(false)}
-              onEnded={() => setIsPlayingRecording(false)}
+        {/* Play/Pause overlay */}
+        <button
+          onClick={handlePlayRecording}
+          className="absolute inset-0 flex items-center justify-center hover:bg-black/30 transition"
+        >
+          <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
+            {isPlayingRecording ? (
+              <Square className="text-white w-8 h-8" />
+            ) : (
+              <Play className="text-white w-8 h-8" />
+            )}
+          </div>
+        </button>
+      </div>
+
+      <div className="bg-gray-800 p-4 text-center">
+        <p className="text-white text-sm">
+          Recording Duration: {formatTime(recordingTime)}
+        </p>
+      </div>
+    </div>
+  )}
+
+  {/* Text + Buttons (Kanan) */}
+  {recordingComplete && (
+    <div className="flex-1">
+      <div className="text-center mb-6">
+        <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-4">
+          <svg
+            className="w-6 h-6 text-green-500"
+            fill="none"
+            stroke="currentColor"
+            viewBox="0 0 24 24"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              strokeWidth={2}
+              d="M5 13l4 4L19 7"
             />
-            
-            {/* Play/Pause overlay */}
-            <button
-              onClick={handlePlayRecording}
-              className="absolute inset-0 flex items-center justify-center hover:bg-black/30 transition"
-            >
-              <div className="w-16 h-16 bg-white/20 rounded-full flex items-center justify-center">
-                {isPlayingRecording ? (
-                  <Square className="text-white w-8 h-8" />
-                ) : (
-                  <Play className="text-white w-8 h-8" />
-                )}
-              </div>
-            </button>
-          </div>
-
-          <div className="bg-gray-800 p-4 text-center">
-            <p className="text-white text-sm">Recording Duration: {formatTime(recordingTime)}</p>
-          </div>
+          </svg>
         </div>
-      )}
+        <p className="text-green-600 font-bold text-xl mb-2">
+          Recording completed successfully!
+        </p>
+      </div>
 
-      {/* Question reminder */}
-      {question && (
-        <div className="bg-blue-50 rounded-lg p-4 mb-6">
-          <h3 className="font-semibold text-blue-800 mb-2">Question:</h3>
-          <p className="text-blue-700">{question}</p>
-        </div>
-      )}
+      {/* Action buttons */}
+      <div className="flex flex-col flex-wrap gap-4 pt-10">
+        <button
+          onClick={resetRecording}
+          className="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center"
+        >
+          Retake Video
+          <RotateCcw className="w-5 h-5 ml-3" />
+        </button>
 
-      {/* Recording completion actions */}
-      {recordingComplete && (
-        <div className="space-y-4">
-          <div className="text-center">
-            <div className="inline-flex items-center justify-center w-12 h-12 bg-green-100 rounded-full mb-4">
-              <svg className="w-6 h-6 text-green-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <p className="text-green-600 font-medium mb-6">Recording completed successfully!</p>
-          </div>
+        <button
+          onClick={handleSubmitRecording}
+          className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center transform hover:scale-105"
+        >
+          Continue to Next Question
+          <ArrowRight className="w-5 h-5 ml-3" />
+        </button>
+      </div>
+    </div>
+  )}
+</div>
 
-          {/* Action buttons */}
-          <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <button
-              onClick={resetRecording}
-              className="bg-gray-500 hover:bg-gray-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center"
-            >
-              <RotateCcw className="w-5 h-5 mr-2" />
-              Retake Video
-            </button>
-            
-            <button
-              onClick={handleSubmitRecording}
-              className="bg-blue-500 hover:bg-blue-600 text-white font-semibold py-3 px-6 rounded-lg transition-all duration-200 flex items-center justify-center transform hover:scale-105"
-            >
-              Continue to Next Question
-              <ArrowRight className="w-5 h-5 ml-2" />
-            </button>
-          </div>
-        </div>
-      )}
     </div>
   );
 };
