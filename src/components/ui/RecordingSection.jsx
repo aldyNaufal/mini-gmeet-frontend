@@ -204,7 +204,8 @@ const RecordingSection = ({ onCompleteRecording, question }) => {
   // Permission request UI
   if (!hasPermission) {
     return (
-      <div className="bg-white rounded-2xl shadow-xl p-8 text-center">
+      <div className="bg-white rounded-2xl shadow-xl p-8 text-center
+      ">
         <div className="w-16 h-16 bg-red-500 rounded-full flex items-center justify-center mx-auto mb-4">
           <Camera className="w-8 h-8 text-white" />
         </div>
