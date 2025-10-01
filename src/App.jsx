@@ -6,6 +6,7 @@ import Layout from './components/layout/Layout';
 import InterviewResult from './pages/InterviewResult';
 import InstructionPage from './pages/InstructionsPage';
 import VideoInterview from './pages/VideoInterview';
+import AdminDashboard from './pages/Video-Interview/admin/AdminDashboard';
 
 function App() {
   return (
@@ -17,6 +18,7 @@ function App() {
           <Route path="interview-result" element={<InterviewResult />} />
           <Route path="video-interview" element={<VideoInterview/>} />
           <Route path="instructions" element={<InstructionPage />} />
+          <Route path="admin-video" element={<AdminDashboard />} />
         </Route>
         
         {/* <Route path="admin-room" element={<AdminRoom />} /> */}

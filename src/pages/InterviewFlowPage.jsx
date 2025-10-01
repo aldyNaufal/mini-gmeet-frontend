@@ -1,8 +1,8 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import QuestionDisplay from "../components/ui/QuestionDisplay";
-import RecordingSection from "../components/ui/RecordingSection";
-import FinishPage from "../components/ui/FinishPage"; // import langsung
+import QuestionDisplay from "../components/ui/Video-Interview/user/QuestionDisplay";
+import RecordingSection from "../components/ui/Video-Interview/user/RecordingSection";
+import FinishPage from "../components/ui/Video-Interview/user/FinishPage"; // import langsung
 import axios from "axios";
 
 const questions = [

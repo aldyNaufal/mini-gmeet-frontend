@@ -18,6 +18,7 @@ export default function SideBar() {
     { id: 'video-interview', label: 'Video Interview', icon: FileVideo2, path: '/video-interview' },
     { id: 'interview-result', label: 'Interview Result', icon: TvMinimal, path: '/interview-result' },
     { id: 'match-candidates', label: 'Matching Candidates', icon: BadgeCheck, path: '/match-candidates' },
+    { id: 'admin-video', label: 'Admin Video', icon: FileVideo2, path: '/admin-video' },
   ];
 
   const handleNavigation = (path) => {
