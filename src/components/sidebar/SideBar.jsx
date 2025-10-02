@@ -13,7 +13,7 @@ export default function SideBar() {
   const navigate = useNavigate();
 
   const menuItems = [
-    { id: 'home', label: 'Home', icon: Home, path: '/' },
+    { id: 'home', label: 'Home', icon: Home, path: '/home' },
     { id: 'assignment', label: 'Assignment', icon: BookOpenCheck, path: '/assignment' },
     { id: 'video-interview', label: 'Video Interview', icon: FileVideo2, path: '/video-interview' },
     { id: 'interview-result', label: 'Interview Result', icon: TvMinimal, path: '/interview-result' },
