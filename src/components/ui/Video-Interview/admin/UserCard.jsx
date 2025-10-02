@@ -1,3 +1,6 @@
+import react from  "react";
+import { Edit2, Trash2 } from "lucide-react";
+
 const UserCard = ({ user, questionLists, onEdit, onDelete }) => {
     return (
         <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
@@ -22,7 +25,7 @@ const UserCard = ({ user, questionLists, onEdit, onDelete }) => {
             </div>
         </div>
         
-        {user.assignedLists.length > 0 && (
+        {user.assignedLists?.length > 0 && (
             <div>
             <p className="text-gray-700 text-sm font-semibold mb-2">List yang di-assign:</p>
             <div className="flex flex-wrap gap-2">

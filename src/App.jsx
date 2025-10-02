@@ -7,18 +7,22 @@ import InterviewResult from './pages/InterviewResult';
 import InstructionPage from './pages/InstructionsPage';
 import VideoInterview from './pages/VideoInterview';
 import AdminDashboard from './pages/Video-Interview/admin/AdminDashboard';
+import LoginPage from './pages/home/LoginPage';
 
 function App() {
   return (
     <BrowserRouter>
       <Routes>
+        <Route index element={<LoginPage />} />
          <Route path="/" element={<Layout />}>
-          <Route index element={<Home />} />
+          
+          <Route path="home" element={<Home />} />
           <Route path="assignment" element={<Assignment />} />
           <Route path="interview-result" element={<InterviewResult />} />
           <Route path="video-interview" element={<VideoInterview/>} />
           <Route path="instructions" element={<InstructionPage />} />
           <Route path="admin-video" element={<AdminDashboard />} />
+
         </Route>
         
         {/* <Route path="admin-room" element={<AdminRoom />} /> */}
